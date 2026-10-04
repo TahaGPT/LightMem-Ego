@@ -10,13 +10,7 @@ from typing import Any
 
 from online_preprocess.io_utils import read_json, utc_now_iso
 from online_short_term.schemas import build_retrieval_text
-from online_llm_config import (
-    external_openai_api_key,
-    external_openai_base_url,
-    external_openai_model,
-    local_llm_enabled,
-    merge_local_chat_request_kwargs,
-)
+from online_llm_config import local_llm_enabled, merge_local_chat_request_kwargs
 
 
 SYSTEM_PROMPT = """You refine a provisional short-term micro-event for first-person video memory.
@@ -231,7 +225,7 @@ class MicroEventRefiner:
         timeout: float | None = None,
     ) -> None:
         self.backend = (backend or os.getenv("EM2MEM_MST_REFINE_BACKEND", "openai")).strip().lower()
-        self.model = model or external_openai_model()
+        self.model = model or os.getenv("EM2MEM_MST_REFINE_MODEL") or os.getenv("EM2MEM_VLM_MODEL", "gpt-4o-mini")
         self.max_images = int(max_images or os.getenv("EM2MEM_MST_REFINE_MAX_IMAGES", "4"))
         self.timeout = float(timeout or os.getenv("EM2MEM_MST_REFINE_TIMEOUT", "120"))
         self._client = None
@@ -339,8 +333,8 @@ class MicroEventRefiner:
             raise RuntimeError("openai package is required for EM2MEM_MST_REFINE_BACKEND=openai") from exc
         if self._client is None:
             self._client = OpenAI(
-                api_key=external_openai_api_key(),
-                base_url=external_openai_base_url(),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE"),
                 timeout=self.timeout,
             )
         frames = _select_keyframes(event, self.max_images)
@@ -358,8 +352,9 @@ class MicroEventRefiner:
             image_path = session_dir / str(frame.get("path", ""))
             if image_path.exists():
                 content.append({"type": "image_url", "image_url": {"url": _image_data_url(image_path)}})
-        request_kwargs = merge_local_chat_request_kwargs(_reasoning_effort_kwargs(), enabled=False)
-        request_kwargs["response_format"] = {"type": "json_object"}
+        request_kwargs = merge_local_chat_request_kwargs(_reasoning_effort_kwargs())
+        if local_llm_enabled():
+            request_kwargs["response_format"] = {"type": "json_object"}
         try:
             response = self._client.chat.completions.create(
                 model=self.model,

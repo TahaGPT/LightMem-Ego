@@ -3,15 +3,13 @@ import {
   ChevronDown,
   ChevronUp,
   Film,
-  Images,
-  Music,
   Radio,
   RefreshCw,
   RotateCcw,
   Upload,
   Wrench
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ANSWER_MODES, LONG_TERM_RETRIEVAL_SCHEMES } from '../hooks/useAskLightMemEgo.js'
 import { INPUT_MODES } from '../hooks/useRealtimeStream.js'
 
@@ -19,12 +17,6 @@ export default function AdvancedTools({ stream, ask, onReset }) {
   const [open, setOpen] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
   const [demoTestFiles, setDemoTestFiles] = useState({ day1: null, day2: null })
-  const [clockNow, setClockNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!stream.imageUploadNextAt) return undefined
-    const timer = window.setInterval(() => setClockNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [stream.imageUploadNextAt])
   const activeDemoTestClip = (stream.demoTestSession.clips || []).find((clip) => (
     clip.clipId === stream.demoTestSession.activeClipId
   )) || (stream.demoTestSession.clips || [])[0] || null
@@ -54,7 +46,7 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.FRAME_AUDIO}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.FRAME_AUDIO)}
               >
                 <Upload size={16} />
@@ -65,7 +57,7 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.WEBRTC_WHIP}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.WEBRTC_WHIP)}
               >
                 <Radio size={16} />
@@ -76,7 +68,7 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.ROKID}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.ROKID)}
               >
                 <Radio size={16} />
@@ -87,7 +79,7 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.ROKID_LIVE_RTMP}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.ROKID_LIVE_RTMP)}
               >
                 <Radio size={16} />
@@ -98,7 +90,7 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.DEMO_VIDEO}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.DEMO_VIDEO)}
               >
                 <Film size={16} />
@@ -109,22 +101,11 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 type="button"
                 role="radio"
                 aria-checked={stream.inputMode === INPUT_MODES.DEMO_TEST}
-                disabled={!stream.canChangeInputMode}
+                disabled={!stream.canStart}
                 onClick={() => stream.setInputMode(INPUT_MODES.DEMO_TEST)}
               >
                 <Film size={16} />
                 <span>Demo Test</span>
-              </button>
-              <button
-                className={stream.inputMode === INPUT_MODES.IMAGE_UPLOAD ? 'active' : ''}
-                type="button"
-                role="radio"
-                aria-checked={stream.inputMode === INPUT_MODES.IMAGE_UPLOAD}
-                disabled={!stream.canChangeInputMode}
-                onClick={() => stream.setInputMode(INPUT_MODES.IMAGE_UPLOAD)}
-              >
-                <Images size={16} />
-                <span>Photo / Audio Stream</span>
               </button>
             </div>
             <p className="mode-description">
@@ -136,94 +117,9 @@ export default function AdvancedTools({ stream, ask, onReset }) {
                 ? 'Rokid Glass uses /rokid/* APIs and keeps the session_id returned by this tab.'
                 : stream.isWebRtcMode
                   ? 'Camera and microphone publish through WHIP; the backend live ingest worker extracts frames and audio.'
-                  : stream.isImageUploadMode
-                    ? 'Upload local images and audio. By default, the next item starts as soon as the previous analysis is acknowledged.'
-                    : 'Stable baseline: canvas frames and MediaRecorder chunks upload through HTTP.'}
+                  : 'Stable baseline: canvas frames and MediaRecorder chunks upload through HTTP.'}
             </p>
           </section>
-
-          {stream.inputMode === INPUT_MODES.IMAGE_UPLOAD && (
-            <section className="advanced-section photo-stream-section">
-              <div className="advanced-section-heading">
-                <div>
-                  <span>Photo / Audio Stream</span>
-                  <strong>{stream.imageUploadQueue.length ? `${stream.imageUploadQueue.length} media files selected` : 'No media selected'}</strong>
-                </div>
-              </div>
-              <label className="demo-upload-control photo-stream-picker">
-                <Images size={16} />
-                <span>Select images or audio</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/bmp,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a,audio/aac,audio/webm,audio/flac"
-                  multiple
-                  disabled={!stream.canChangeInputMode || ['starting', 'running', 'uploading', 'paused'].includes(stream.imageUploadStatus)}
-                  onChange={(event) => {
-                    stream.setImageUploadFiles(event.target.files)
-                    event.target.value = ''
-                  }}
-                />
-              </label>
-              {stream.imageUploadQueue.length > 0 && (
-                <div className="photo-stream-queue">
-                  {stream.imageUploadQueue.map((item, index) => (
-                    <div className={`photo-stream-item ${index < stream.imageUploadIndex ? 'uploaded' : ''}`} key={`${item.name}-${index}`}>
-                      {item.kind === 'image' ? <img src={item.previewUrl} alt="" /> : <div className="photo-stream-audio-thumb"><Music size={20} /></div>}
-                      <div className="photo-stream-item-meta">
-                        <strong>{index + 1}. {item.name}</strong>
-                        <small>{item.kind === 'image' ? `${item.width} × ${item.height} · ` : 'Audio · '}{formatBytes(item.size)}</small>
-                      </div>
-                      <button
-                        className="icon-button secondary"
-                        type="button"
-                        aria-label={`Remove ${item.name}`}
-                        disabled={stream.imageUploadStatus === 'uploading' || stream.imageUploadStatus === 'running'}
-                        onClick={() => stream.removeImageUploadFile(index)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="photo-stream-summary">
-                <span>Uploaded {Math.min(stream.imageUploadIndex, stream.imageUploadQueue.length)} / {stream.imageUploadQueue.length}</span>
-                <span>{stream.imageUploadStatus === 'completed' ? 'Completed' : stream.imageUploadStatus}</span>
-                {stream.imageUploadNextAt > 0 && <span>Next upload in {formatCountdown(stream.imageUploadNextAt, clockNow)}</span>}
-              </div>
-              <label className="photo-stream-no-wait-toggle">
-                <input
-                  type="checkbox"
-                  checked={stream.imageUploadNoWait}
-                  disabled={['starting', 'running', 'uploading', 'paused'].includes(stream.imageUploadStatus)}
-                  onChange={(event) => stream.setImageUploadNoWait(event.target.checked)}
-                />
-                <span>No enforced wait between media items</span>
-                <small>{stream.imageUploadNoWait ? 'Upload next after the previous item is analyzed.' : 'Wait 60 seconds between uploads.'}</small>
-              </label>
-              {stream.imageUploadError && <div className="inline-error">{stream.imageUploadError}</div>}
-              <div className="photo-stream-actions">
-                <button className="icon-button secondary" type="button" onClick={stream.startImageUpload} disabled={!stream.canStartSelectedMode}>
-                  <span>Start Photo / Audio Stream</span>
-                </button>
-                <button className="icon-button secondary" type="button" onClick={stream.pause} disabled={!stream.canPause || !stream.isImageUploadMode}>
-                  <span>Pause</span>
-                </button>
-                <button className="icon-button secondary" type="button" onClick={stream.resume} disabled={!stream.isPaused || !stream.isImageUploadMode}>
-                  <span>Resume</span>
-                </button>
-                <button className="icon-button secondary" type="button" onClick={stream.retryImageUpload} disabled={stream.imageUploadStatus !== 'error'}>
-                  <RefreshCw size={16} />
-                  <span>Retry</span>
-                </button>
-                <button className="icon-button secondary" type="button" onClick={stream.clearImageUploadFiles} disabled={!stream.imageUploadQueue.length || stream.imageUploadStatus === 'uploading'}>
-                  <RotateCcw size={16} />
-                  <span>Clear Queue</span>
-                </button>
-              </div>
-              {!stream.imageUploadQueue.length && <p className="mode-description">Select at least one image or audio file to start.</p>}
-            </section>
-          )}
 
           {stream.inputMode === INPUT_MODES.DEMO_VIDEO && (
             <section className="advanced-section">
@@ -572,16 +468,4 @@ function formatDuration(value) {
   const minutes = Math.floor(seconds / 60)
   const remainder = Math.round(seconds % 60)
   return `${minutes}:${String(remainder).padStart(2, '0')}`
-}
-
-function formatBytes(bytes) {
-  const value = Number(bytes) || 0
-  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatCountdown(timestamp, now = Date.now()) {
-  const remaining = Math.max(0, Number(timestamp) - now)
-  const seconds = Math.ceil(remaining / 1000)
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }

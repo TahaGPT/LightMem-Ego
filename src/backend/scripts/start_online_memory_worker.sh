@@ -18,13 +18,6 @@ fi
 # shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/llm_profile.sh"
 
-# Memory construction and semantic extraction are preparation stages, not
-# final answering; keep them on the external OpenAI-compatible endpoint.
-export OPENAI_API_KEY="${EM2MEM_EXTERNAL_OPENAI_API_KEY:-${OPENAI_API_KEY}}"
-export OPENAI_BASE_URL="${EM2MEM_EXTERNAL_OPENAI_BASE_URL:-${OPENAI_BASE_URL}}"
-export EM2MEM_LOCAL_LLM_ENABLED=0
-unset EM2MEM_LOCAL_LLM_NON_THINKING EM2MEM_LOCAL_LLM_BASE_URL
-
 export EM2MEM_CLEAN_CUDA_ENV="${EM2MEM_CLEAN_CUDA_ENV:-1}"
 if [[ "${EM2MEM_CLEAN_CUDA_ENV}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
   export LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/compat/lib"

@@ -30,7 +30,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Exercise the local Qwen3.5 OpenAI-compatible API.")
     parser.add_argument("--base-url", default=os.getenv("EM2MEM_LOCAL_LLM_BASE_URL", "http://127.0.0.1:18100/v1"))
     parser.add_argument("--api-key", default=os.getenv("EM2MEM_LOCAL_LLM_API_KEY", "local-qwen35"))
-    parser.add_argument("--model", default=os.getenv("EM2MEM_LOCAL_LLM_SERVED_MODEL", "Qwen3.5-9B"))
+    parser.add_argument("--model", default=os.getenv("EM2MEM_LOCAL_LLM_SERVED_MODEL", "gpt-5.4"))
     args = parser.parse_args()
 
     client = OpenAI(base_url=args.base_url, api_key=args.api_key, timeout=180)

@@ -44,7 +44,7 @@ class LLMModel:
         elif "qwen3" in model_name_lower:
             return "qwen3vl"
         else:
-            raise ValueError(f"Unknown model name: {model_name}")
+            return "openai"  # default to OpenAI-compatible client for any non-qwen3 model
 
     def _init_model(self, **kwargs):
         if self.provider == "openai":

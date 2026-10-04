@@ -177,28 +177,6 @@ class SessionEngineCache:
             self._close_engine(engine)
         return bool(engines)
 
-    def install(self, engine: LoadedQueryEngine) -> None:
-        """Atomically replace the cached engine for a session.
-
-        Memory editing preloads a candidate runtime before publishing it.  The
-        regular query path may still be using an older instance, so replacement
-        happens under the cache lock and the old instance is closed afterwards.
-        """
-        session_id = getattr(engine, "session_id", None)
-        if not session_id:
-            raise ValueError("engine.session_id is required")
-        scheme = normalize_long_term_retrieval_scheme(getattr(engine, "long_term_retrieval_scheme", None))
-        cache_key = retrieval_scheme_cache_key(session_id, scheme)
-        old = None
-        with self._lock:
-            old = self._items.pop(cache_key, None)
-            self._items[cache_key] = engine
-            self._items.move_to_end(cache_key)
-            self._evict_expired_locked()
-            self._evict_lru_locked()
-        if old is not None and old is not engine:
-            self._close_engine(old)
-
     def clear(self) -> None:
         with self._lock:
             engines = list(self._items.values())

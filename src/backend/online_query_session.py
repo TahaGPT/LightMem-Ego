@@ -99,8 +99,8 @@ def main() -> None:
         action="store_true",
         help="Disable image evidence. This is a flag; do not pass true/false after it. By default the router decides.",
     )
-    parser.add_argument("--max-image-frames", type=int, default=3, help="Maximum selected keyframes per evidence to send when image evidence is enabled.")
-    parser.add_argument("--max-image-evidence", type=int, default=9, help="Maximum total keyframes to send when image evidence is enabled.")
+    parser.add_argument("--max-image-frames", type=int, default=4, help="Maximum selected keyframes to send when image evidence is enabled.")
+    parser.add_argument("--max-image-evidence", type=int, default=3, help="Maximum visual-retrieval keyframes to send when image evidence is enabled.")
     parser.add_argument("--text-top-k", type=int, default=None)
     parser.add_argument("--visual-top-k", type=int, default=None)
     parser.add_argument("--final-evidence-k", type=int, default=None)

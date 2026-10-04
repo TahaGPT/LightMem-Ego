@@ -135,9 +135,7 @@ class QueryRouter:
         self.backend = backend or os.getenv("EM2MEM_QUERY_ROUTER_BACKEND", "rule")
         self.default_retrieval_mode = os.getenv("EM2MEM_QUERY_ROUTER_DEFAULT_RETRIEVAL_MODE", "auto")
         self.default_use_image = os.getenv("EM2MEM_QUERY_ROUTER_DEFAULT_USE_IMAGE", "auto")
-        # This is the request-wide budget. EvidencePacker enforces the
-        # per-evidence cap separately (default: 3) and the total cap at 9.
-        self.max_image_evidence = _env_int("EM2MEM_QUERY_ROUTER_MAX_IMAGE_EVIDENCE", 9)
+        self.max_image_evidence = _env_int("EM2MEM_QUERY_ROUTER_MAX_IMAGE_EVIDENCE", 3)
         self.text_evidence_k = _env_int("EM2MEM_QUERY_ROUTER_TEXT_EVIDENCE_K", 5)
         self.final_evidence_k = _env_int("EM2MEM_QUERY_ROUTER_FINAL_EVIDENCE_K", 4)
         self.evidence_frames_k = _env_int("EM2MEM_QUERY_ROUTER_EVIDENCE_FRAMES_K", 5)

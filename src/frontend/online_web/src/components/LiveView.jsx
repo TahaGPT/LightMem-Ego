@@ -1,6 +1,5 @@
 import {
   Camera,
-  Images,
   Mic,
   Pause,
   Play,
@@ -32,13 +31,7 @@ export default function LiveView({ stream, onOpenAsk, onReset }) {
 
       <div className={`video-hero state-${stream.status} ${hideDemoVideoBeforeStart ? 'demo-test-idle' : ''}`}>
 
-        {stream.isImageUploadMode ? (
-          <div className="live-video photo-stream-preview" aria-label="Photo and audio upload status">
-            <Images size={48} />
-            <strong>{stream.imageUploadStatus === 'completed' ? 'Photo / Audio Stream complete' : 'Photo / Audio Stream ready'}</strong>
-            <span>Uploaded {Math.min(stream.imageUploadIndex, stream.imageUploadQueue.length)} / {stream.imageUploadQueue.length}</span>
-          </div>
-        ) : stream.isDemoMode ? (
+        {stream.isDemoMode ? (
           <video
             ref={stream.videoRef}
             className={`live-video demo-video ${hideDemoVideoBeforeStart ? 'demo-video-hidden' : ''}`}
@@ -72,10 +65,10 @@ export default function LiveView({ stream, onOpenAsk, onReset }) {
         {!stream.isLive && !stream.isPaused && stream.status !== 'starting' && !(stream.isLegacyDemoMode && stream.demoSession.sessionId) && !(stream.isDemoTestMode && stream.demoTestSession.sessionId) && (
           <div className="hero-empty">
             <div className="hero-empty-mark">
-              {stream.isImageUploadMode ? <Images size={36} /> : (stream.isWebRtcMode || stream.isRokidLiveMode ? <Radio size={36} /> : <Video size={36} />)}
+              {stream.isWebRtcMode || stream.isRokidLiveMode ? <Radio size={36} /> : <Video size={36} />}
             </div>
             <h1>{stream.status === 'stopped' ? 'Realtime understanding stopped' : 'Start realtime understanding'}</h1>
-          <p>{stream.isImageUploadMode ? 'Select local images or audio from Advanced / Tools, then start Photo / Audio Stream.' : (stream.isDemoMode ? ((stream.isDemoTestMode ? stream.demoTestSession.sessionId : stream.demoSession.sessionId) ? 'Demo video is ready. Start to play it as a live memory stream.' : 'Upload demo video assets from Advanced / Tools.') : (stream.isRokidLiveMode ? 'Rokid RTMP is ingesting on the backend. Web preview is intentionally black.' : (stream.isWebRtcMode ? 'Publish camera and microphone through WHIP.' : 'Live video memory is idle.')))}</p>
+            <p>{stream.isDemoMode ? ((stream.isDemoTestMode ? stream.demoTestSession.sessionId : stream.demoSession.sessionId) ? 'Demo video is ready. Start to play it as a live memory stream.' : 'Upload demo video assets from Advanced / Tools.') : (stream.isRokidLiveMode ? 'Rokid RTMP is ingesting on the backend. Web preview is intentionally black.' : (stream.isWebRtcMode ? 'Publish camera and microphone through WHIP.' : 'Live video memory is idle.'))}</p>
           </div>
         )}
 
@@ -86,7 +79,7 @@ export default function LiveView({ stream, onOpenAsk, onReset }) {
                 <span className={`live-dot ${stream.isLive ? 'pulse' : ''}`} />
                 <span>{statusLabel}</span>
               </div>
-              <div className="glass-pill">{stream.isLegacyDemoMode ? 'Demo Video' : (stream.isImageUploadMode ? 'Photo / Audio Stream' : (stream.isRokidMode ? (stream.isRokidLiveMode ? 'Rokid RTMP' : 'Rokid Glass') : (stream.isWebRtcMode ? 'WebRTC' : 'Frame / Audio')))}</div>
+              <div className="glass-pill">{stream.isLegacyDemoMode ? 'Demo Video' : (stream.isRokidMode ? (stream.isRokidLiveMode ? 'Rokid RTMP' : 'Rokid Glass') : (stream.isWebRtcMode ? 'WebRTC' : 'Frame / Audio'))}</div>
             </div>
 
             {!stream.isDemoTestMode && (
@@ -101,11 +94,6 @@ export default function LiveView({ stream, onOpenAsk, onReset }) {
                       <Camera size={15} />
                       <span>{stream.demoSession.frameCount ? `${stream.demoSession.frameCount} frames` : 'Tick ready'}</span>
                     </div>
-                  </>
-                ) : stream.isImageUploadMode ? (
-                  <>
-                    <div className="signal-chip"><Images size={15} /><span>{stream.imageUploadStatus}</span></div>
-                    <div className="signal-chip"><Camera size={15} /><span>{Math.min(stream.imageUploadIndex, stream.imageUploadQueue.length)} / {stream.imageUploadQueue.length} uploaded</span></div>
                   </>
                 ) : (stream.isWebRtcMode || stream.isRokidLiveMode) ? (
                   <>
@@ -147,7 +135,7 @@ export default function LiveView({ stream, onOpenAsk, onReset }) {
       )}
 
       <div className="primary-control">
-        {stream.canStartSelectedMode && (
+        {stream.canStart && (
           <button className="main-action" type="button" onClick={stream.start}>
             <Play size={20} fill="currentColor" />
             <span>{stream.status === 'stopped' ? 'Restart' : 'Start Live Understanding'}</span>

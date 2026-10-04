@@ -1,135 +1,26 @@
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="../../figs/lockup_compact_dark.png">
-    <img src="../../figs/lockup_compact.png" width="420" alt="LightMem-Ego">
-  </picture>
-</div>
+# LightMem-Ego App on Rokid AI Glasses
 
-# LightMem-Ego · Rokid AI Glasses App
+This directory contains the app running on Rokid AI Glass for LightMem-Ego. The app serves as the wearable interface for the personal AI assistant, which demonstrates the application scenarios of AI at the edge.
 
-<p>
-  <a href="../../README.md">← Back to LightMem-Ego</a> &nbsp;·&nbsp;
-  <a href="https://github.com/zjunlp/LightMem-Ego/releases/tag/v1.0.0">Download APK</a> &nbsp;·&nbsp;
-  <a href="https://lightmem-ego.zjukg.cn/">Live Demo</a> &nbsp;·&nbsp;
-  <a href="../backend/README.md">Backend</a>
-</p>
+The app captures camera frames and microphone audio from the glasses, uploads them to a configured LightMem-Ego backend service over HTTP, and generates memories accordingly. Users can select preset questions or record audio questions to ask. The app will display memory-grounded answers on the glasses screen. Alternatively, if it's not convenient to ask questions by speaking, we can connect the active session of glass on the [web page](https://lightmem-ego.zjukg.cn/) and ask questions by typing.
 
-The wearable client for [LightMem-Ego](../../README.md). The app captures first-person camera frames and microphone audio from Rokid AI Glass, uploads them to a LightMem-Ego backend over HTTP, and displays memory-grounded answers on the glasses screen. It demonstrates what an always-on personal AI assistant looks like at the edge.
+The app uses standard Android APIs, Jetpack Compose UI, CameraX frame capture, `AudioRecord` microphone capture, HTTP multipart upload, and Rokid touchpad / button input. It does not require a phone-side SDK at runtime.
 
-Users can ask a preset question with a touchpad click or record a voice question with the physical button. When speaking isn't convenient, the same live session can be joined from the [web page](https://lightmem-ego.zjukg.cn/) and queried by typing instead.
+## Demonstration
 
-The app uses standard Android APIs — Jetpack Compose UI, CameraX frame capture, `AudioRecord` microphone capture, and HTTP multipart upload — and needs no phone-side SDK at runtime.
+- User perspective
 
-## 🎬 Demonstration
+  <img src="assets/demo_slide7_cropped_for_emnlp_01.png" alt="Rokid AI Glass demo view showing a LightMem-Ego answer over the user's real-world scene" width="260" />
 
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="assets/demo_slide7_cropped_for_emnlp_01.png" alt="Rokid AI Glass demo view showing a LightMem-Ego answer over the user's real-world scene" width="300" />
-      <br><b>User perspective</b><br>An answer over the real-world scene
-    </td>
-    <td align="center" width="50%">
-      <img src="assets/glass_1_01.png" alt="LightMem-Ego glasses UI showing an audio question, answer page, latency, and touch controls" width="300" />
-      <br><b>Glasses app UI</b><br>Question, answer page, latency, and touch controls
-    </td>
-  </tr>
-</table>
+- Glasses app UI
 
-## 📱 Install The App
+  <img src="assets/glass_1_01.png" alt="LightMem-Ego glasses UI showing an audio question, answer page, latency, and touch controls" width="260" />
 
-### Option 1 — Download the released APK
+## Usage
 
-Grab `app-release.apk` from the [v1.0.0 release](https://github.com/zjunlp/LightMem-Ego/releases/download/v1.0.0/app-release.apk), then install it over ADB:
+We have released the APK file of the app. You can 
 
-```bash
-adb devices                       # confirm the glasses are visible
-adb install -r app-release.apk
-```
-
-### Option 2 — Build from source
-
-```bash
-cd src/ai_glass_app
-./gradlew assembleDebug           # Windows: .\gradlew.bat assembleDebug
-```
-
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`:
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-> [!WARNING]
-> Release builds need a signing keystore, which is **not** included in this repository — only debug builds work out of the box.
-
-## 🚀 Requirements
-
-- Rokid AI Glass, with ADB enabled.
-- Android Studio, or the Android SDK command-line tools.
-- A JDK compatible with the Android Gradle Plugin used by this project.
-- A reachable LightMem-Ego backend API.
-
-## 🕹️ Using The App
-
-Launch it from the glasses launcher, or start it over ADB:
-
-```bash
-adb shell monkey -p cn.zjukg.lightmem.glass 1
-```
-
-The glasses have two control surfaces: a **touchpad** on the side of the temple arm, and a **physical button** near the front of the temple arm.
-
-<img src="assets/glass_button.png" alt="The two control areas of the Rokid AI Glasses" width="400" />
-
-After launching, you first see the welcome screen:
-
-<img src="assets/welcome_page.png" alt="Welcome page of the app" width="260" />
-
-Press and hold the touchpad to start a session. When the small text below the **“LightMem-Ego”** title shows a specific number of days, the app has connected to the backend; once the Answer section is ready, you can start asking questions:
-
-<img src="assets/start_session.png" alt="After starting a session" width="260" />
-
-There are two ways to ask:
-
-- **Preset questions** — double click the touchpad to cycle through them, then click to ask the selected one.
-- **Voice questions** — push the physical button to start recording, then push it again to stop and submit.
-
-> [!TIP]
-> Speaking isn't the only way in. Open the [web page](https://lightmem-ego.zjukg.cn/), select the **Rokid** mode (not *Rokid RTMP*, which is for testing other functions) and start — it joins the same live session running on the glasses, so you can type instead:
-
-<img src="assets/frontend_rokid.png" alt="Asking questions about the live glasses session from the web page" />
-
-## ⌨️ Controls Reference
-
-| Input | Action |
-| :--- | :--- |
-| Touchpad, one-finger long press | Start or stop the real-time capture session. |
-| Touchpad, one-finger click (running) | Ask the currently selected preset question. |
-| Touchpad, one-finger double click | Select the next preset question. |
-| Touchpad, two-finger long press | Show the next answer page when an answer has multiple pages. |
-| Physical temple button (running) | Start recording a voice question; press again to stop and submit it. |
-
-## 🔧 Configuration
-
-Backend endpoint, input mode, preset questions, and capture rates live in one file:
-
-[`app/src/main/java/cn/zjukg/lightmem/glass/lightmem_ego/LightMemEgoConfig.kt`](app/src/main/java/cn/zjukg/lightmem/glass/lightmem_ego/LightMemEgoConfig.kt)
-
-| Setting | Default | Notes |
-| :--- | :--- | :--- |
-| `API_BASE_URL` | `https://lightmem-ego.zjukg.cn/api` | Change this to your own backend. |
-| `INPUT_MODE` | `rokid_frame_audio` | Matches the backend's Rokid adapter path. |
-| `PRESET_QUESTIONS` | Four everyday questions | Edit the list to suit your scenario. |
-| `FRAME_INTERVAL_MS` | `1000` | Frame upload cadence. |
-| `AUDIO_CHUNK_MS` | `1000` | Audio chunk length. |
-| `ANSWER_TTS_ENABLED` | `false` | Set `true` to speak answers aloud. |
-
-> [!IMPORTANT]
-> `API_BASE_URL` points at our hosted demo server by default. Change it to your own backend before capturing anything you would not want to upload elsewhere.
-
-The backend must be started with `input_mode=rokid_frame_audio`, and it never calls the Rokid SDK — it reuses the standard stream, current-memory, short-term-memory, and query paths. See [`../backend/README.md`](../backend/README.md) for the API contract and timestamp rule.
-
-## 📁 Project Layout
+## Project Layout
 
 ```text
 src/ai_glass_app/
@@ -145,9 +36,80 @@ src/ai_glass_app/
   gradle/libs.versions.toml
 ```
 
-## 🔐 Permissions
+## Requirements
 
-The app declares only what the glasses-side realtime flow needs:
+- Rokid AI Glass.
+- Android Studio or Android SDK command-line tools.
+- JDK compatible with the Android Gradle Plugin used by this project.
+- ADB access to the glasses.
+- A reachable LightMem-Ego backend API.
+
+## Install
+
+1. Enable ADB for the Rokid AI Glass.
+2. Check that the device is visible:
+
+```bash
+adb devices
+```
+
+3. Install the APK:
+
+```bash
+adb install -r path_to_APK
+```
+
+## Use
+
+Start the app from the glasses launcher, or start it with ADB:
+
+```bash
+adb shell monkey -p cn.zjukg.lightmem.glass 1
+```
+
+The Rokid AI Glasses have two control areas: a **touchpad** on the side of the temple arm and a **physical button** near the front of the temple arm.
+
+<img src="assets/glass_button.png" alt="two control areas of rokid glass" width="400" />
+
+After launching the app, you will first see the welcome screen.
+
+<img src="assets/welcome_page.png" alt="welcome page of app" width="260" />
+
+Press and hold the touchpad to enter the interface shown below and start recording your experiences and asking questions. 
+
+<img src="assets/welcome_page.png" alt="welcome page of app" width="260" />
+
+When the small text below the **“LightMem-Ego”** title displays a specific number of days, the app has successfully connected to the backend server. Once the Answer section is ready, you can start asking questions.
+
+<img src="assets/start_session.png" alt="after starting session" width="260" />
+
+This app supports two ways to ask questions:
+
+- Double click the **touchpad** to change the preset questions, then click to ask the selected questions. You can change the preset questions in `.\src\ai_glass_app\app\src\main\java\cn\zjukg\lightmem\glass\lightmem_ego\LightMemEgoConfig.kt: 8-13`.
+- Push the **physical button** to start a voice question. After speaking questions, push the button again to end the voice question.
+
+If it's inconvenient to speak, you can ask on the web page as well. Just select "**Rokid**" mode (not "Rokid RTMP", which is for testing some functions) and start, then it will automatically connect to the same session on glass:
+
+<img src="assets/frontend_rokid.png" alt="ask on web page"/>
+
+In order to facilitate everyone's reference, we list all the supported operations here:
+
+The glasses app uses two input surfaces:
+
+- TouchPad: the touch area on the glasses. It supports one-finger click, one-finger double click, one-finger long press, and two-finger long press.
+- Physical temple button: the hardware button on the glasses temple. Click this button for voice-question recording.
+
+App actions:
+
+- TouchPad one-finger long press: start or stop the real-time capture session.
+- TouchPad one-finger click while running: ask the currently selected preset question.
+- TouchPad one-finger double click: select the next preset question.
+- TouchPad two-finger long press: show the next answer page when an answer has multiple pages.
+- Physical temple button click while running: start recording a voice question. Click the physical temple button again to stop recording and submit it.
+
+## Permissions
+
+The app declares only the permissions needed by the glasses-side real-time flow:
 
 ```xml
 <uses-permission android:name="android.permission.CAMERA" />
@@ -155,8 +117,8 @@ The app declares only what the glasses-side realtime flow needs:
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
 ```
 
-- `CAMERA` — captures frames from the glasses camera.
-- `RECORD_AUDIO` — captures microphone audio and voice questions.
-- `INTERNET` — sends data to the configured backend service.
+- `CAMERA`: captures frames from the glasses camera.
+- `RECORD_AUDIO`: captures microphone audio and voice questions.
+- `INTERNET`: sends data to the configured backend service.
 
-No external-storage permission is required, and Android automatic backup is disabled with `android:allowBackup="false"`.
+No external-storage permission is required. Android automatic backup is disabled with `android:allowBackup="false"`.

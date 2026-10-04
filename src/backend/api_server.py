@@ -146,7 +146,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["ETag", "X-Request-ID"],
 )
 
 
@@ -417,7 +416,7 @@ def _new_stream_query_task(
         "retrieval_mode": request.retrieval_mode,
         "use_image_evidence": request.use_image_evidence,
         "max_image_frames": request.max_image_frames,
-        "max_image_evidence": request.max_image_evidence if request.max_image_evidence is not None else 9,
+        "max_image_evidence": request.max_image_evidence if request.max_image_evidence is not None else 1,
         "text_top_k": request.text_top_k,
         "visual_top_k": request.visual_top_k,
         "final_evidence_k": request.final_evidence_k,
@@ -705,8 +704,8 @@ class AskRequest(BaseModel):
     response_mode: str = "legacy"
     retrieval_mode: str = "auto"
     use_image_evidence: Any = "auto"
-    max_image_frames: int = 3
-    max_image_evidence: Optional[int] = 9
+    max_image_frames: int = 4
+    max_image_evidence: Optional[int] = 1
     text_top_k: Optional[int] = None
     visual_top_k: Optional[int] = None
     final_evidence_k: Optional[int] = None
@@ -1202,110 +1201,6 @@ async def session_memory_versions(session_id: str) -> JSONResponse:
             "semantic_state": read_json(session_dir / "em2mem" / "incremental" / "semantic" / "semantic_state.json", default={}),
         },
     )
-
-
-def _memory_error_response(exc: Exception, request_id: str | None = None) -> JSONResponse:
-    from online_memory_edit.service import MemoryEditError
-    from online_memory_view.graph_service import MemoryGraphError
-    from online_memory_view.service import MemoryViewError
-    if isinstance(exc, (MemoryEditError, MemoryGraphError, MemoryViewError)):
-        payload = {
-            "status": "error",
-            "error": {"code": exc.code, "message": exc.message, "details": getattr(exc, "details", {})},
-        }
-        response = JSONResponse(status_code=exc.status_code, content=payload)
-    else:
-        response = JSONResponse(status_code=500, content={"status": "error", "error": {"code": "memory_update_failed", "message": "长期记忆操作失败", "details": {}}})
-    if request_id:
-        response.headers["X-Request-ID"] = request_id
-    return response
-
-
-def _valid_memory_session_id(session_id: str) -> bool:
-    return bool(session_id) and len(session_id) <= 200 and all(ch.isalnum() or ch in {"-", "_"} for ch in session_id)
-
-
-@app.get("/memories/sessions")
-@app.get("/memories/catalog")
-async def get_memory_session_catalog(request: FastAPIRequest, cursor: str | None = None) -> JSONResponse:
-    request_id = request.headers.get("X-Request-ID") or uuid4().hex
-    from online_memory_view.catalog import LongTermMemoryCatalogService, MemoryCatalogError
-    try:
-        result = LongTermMemoryCatalogService(ONLINE_SESSIONS_DIR).load(cursor=cursor)
-        response = JSONResponse(status_code=200, content=result.payload)
-    except MemoryCatalogError as exc:
-        response = JSONResponse(
-            status_code=exc.status_code,
-            content={"status": "error", "error": {"code": exc.code, "message": exc.message, "details": getattr(exc, "details", {})}},
-        )
-    response.headers["X-Request-ID"] = request_id
-    return response
-
-
-@app.get("/session/{session_id}/memories")
-async def get_session_memories(session_id: str, request: FastAPIRequest) -> JSONResponse:
-    request_id = request.headers.get("X-Request-ID") or uuid4().hex
-    if not _valid_memory_session_id(session_id):
-        return _memory_error_response(__import__("online_memory_edit.service", fromlist=["MemoryEditError"]).MemoryEditError(400, "invalid_session_id", "Session ID 格式非法"), request_id)
-    from online_memory_view.service import LongTermMemoryViewService
-    try:
-        result = LongTermMemoryViewService(ONLINE_SESSIONS_DIR, session_id).load()
-        response = JSONResponse(status_code=200, content=result.payload)
-    except Exception as exc:
-        response = _memory_error_response(exc, request_id)
-    response.headers["X-Request-ID"] = request_id
-    return response
-
-
-@app.put("/session/{session_id}/memories/30sec")
-async def update_session_memories_30sec(session_id: str, request: FastAPIRequest, body: dict[str, Any] = Body(...), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
-    request_id = request.headers.get("X-Request-ID") or uuid4().hex
-    from online_memory_edit.service import MemoryEditError, MemoryEditService
-    if not _valid_memory_session_id(session_id):
-        return _memory_error_response(MemoryEditError(400, "invalid_session_id", "Session ID 格式非法"), request_id)
-    if not idempotency_key:
-        return _memory_error_response(MemoryEditError(400, "invalid_idempotency_key", "Idempotency-Key 格式无效"), request_id)
-    try:
-        result = MemoryEditService(ONLINE_SESSIONS_DIR, session_id, project_root=PROJECT_ROOT).update(body, idempotency_key)
-        response = JSONResponse(status_code=result.status_code, content=result.payload)
-    except Exception as exc:
-        response = _memory_error_response(exc, request_id)
-    response.headers["X-Request-ID"] = request_id
-    return response
-
-
-@app.post("/session/{session_id}/memories/30sec/rollback")
-async def rollback_session_memories_30sec(session_id: str, request: FastAPIRequest, body: dict[str, Any] = Body(...), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")) -> JSONResponse:
-    request_id = request.headers.get("X-Request-ID") or uuid4().hex
-    from online_memory_edit.service import MemoryEditError, MemoryEditService
-    if not _valid_memory_session_id(session_id):
-        return _memory_error_response(MemoryEditError(400, "invalid_session_id", "Session ID 格式非法"), request_id)
-    if not idempotency_key:
-        return _memory_error_response(MemoryEditError(400, "invalid_idempotency_key", "Idempotency-Key 格式无效"), request_id)
-    try:
-        result = MemoryEditService(ONLINE_SESSIONS_DIR, session_id, project_root=PROJECT_ROOT).rollback(body, idempotency_key)
-        response = JSONResponse(status_code=result.status_code, content=result.payload)
-    except Exception as exc:
-        response = _memory_error_response(exc, request_id)
-    response.headers["X-Request-ID"] = request_id
-    return response
-
-
-@app.get("/session/{session_id}/memory-graph")
-async def get_session_memory_graph(session_id: str, request: FastAPIRequest, scale: str = "30sec") -> JSONResponse:
-    request_id = request.headers.get("X-Request-ID") or uuid4().hex
-    from online_memory_view.graph_service import LongTermMemoryGraphService
-    from online_memory_view.graph_service import MemoryGraphError
-    if not _valid_memory_session_id(session_id):
-        return _memory_error_response(MemoryGraphError(400, "invalid_session_id", "Session ID 格式非法"), request_id)
-    try:
-        result = LongTermMemoryGraphService(ONLINE_SESSIONS_DIR, session_id).load(scale, request.headers.get("If-None-Match"))
-        response = JSONResponse(status_code=304 if result.not_modified else 200, content=result.payload if result.payload is not None else None)
-        response.headers["ETag"] = result.etag
-    except Exception as exc:
-        response = _memory_error_response(exc, request_id)
-    response.headers["X-Request-ID"] = request_id
-    return response
 
 
 @app.post("/session/{session_id}/append_memory_incremental")
@@ -1979,7 +1874,7 @@ async def stream_audio_question(
     top_k: int = Form(default=5),
     use_current: Optional[bool] = Form(default=True),
     use_image_evidence: Any = Form(default="auto"),
-    max_image_evidence: Optional[int] = Form(default=9),
+    max_image_evidence: Optional[int] = Form(default=1),
     use_interaction_cache: bool = Form(default=True),
     debug_router: bool = Form(default=True),
     long_term_retrieval_scheme: Optional[str] = Form(default=None),
@@ -2102,7 +1997,7 @@ async def stream_audio_question_stream(
     top_k: int = Form(default=5),
     use_current: Optional[bool] = Form(default=True),
     use_image_evidence: Any = Form(default="auto"),
-    max_image_evidence: Optional[int] = Form(default=9),
+    max_image_evidence: Optional[int] = Form(default=1),
     use_interaction_cache: bool = Form(default=True),
     debug_router: bool = Form(default=True),
     client_source: str = Form(default="glasses"),
@@ -4220,7 +4115,7 @@ async def rokid_audio_question(
     top_k: int = Form(default=5),
     use_current: Optional[bool] = Form(default=True),
     use_image_evidence: Any = Form(default="auto"),
-    max_image_evidence: Optional[int] = Form(default=9),
+    max_image_evidence: Optional[int] = Form(default=1),
     use_interaction_cache: bool = Form(default=True),
     debug_router: bool = Form(default=True),
     long_term_retrieval_scheme: Optional[str] = Form(default=None),
@@ -4270,7 +4165,7 @@ async def rokid_audio_question_stream(
     top_k: int = Form(default=5),
     use_current: Optional[bool] = Form(default=True),
     use_image_evidence: Any = Form(default="auto"),
-    max_image_evidence: Optional[int] = Form(default=9),
+    max_image_evidence: Optional[int] = Form(default=1),
     use_interaction_cache: bool = Form(default=True),
     debug_router: bool = Form(default=True),
     client_source: str = Form(default="glasses"),

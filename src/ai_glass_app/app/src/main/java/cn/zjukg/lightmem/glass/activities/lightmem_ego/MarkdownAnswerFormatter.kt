@@ -164,10 +164,12 @@ private fun MarkdownAnswerLine.withFullLineStyle(style: MarkdownAnswerStyle): Ma
     copy(spans = spans + MarkdownAnswerSpan(0, text.length, style))
 
 private fun MarkdownAnswerLine.chunkForGlasses(charsPerLine: Int): List<MarkdownAnswerLine> {
+    if (text.length <= charsPerLine) return listOf(this)
+
     val chunks = mutableListOf<MarkdownAnswerLine>()
     var start = 0
     while (start < text.length) {
-        val end = text.lineEndForGlasses(start, charsPerLine)
+        val end = (start + charsPerLine).coerceAtMost(text.length)
         chunks += MarkdownAnswerLine(
             text = text.substring(start, end),
             spans = spans.mapNotNull { span ->
@@ -184,31 +186,3 @@ private fun MarkdownAnswerLine.chunkForGlasses(charsPerLine: Int): List<Markdown
     }
     return chunks
 }
-
-private fun String.lineEndForGlasses(start: Int, maxWidthUnits: Int): Int {
-    require(maxWidthUnits > 0) { "maxWidthUnits must be positive" }
-
-    var index = start
-    var widthUnits = 0
-    while (index < length) {
-        val codePoint = codePointAt(index)
-        val characterWidth = if (codePoint.isWideOnGlasses()) 2 else 1
-        if (index > start && widthUnits + characterWidth > maxWidthUnits) break
-
-        widthUnits += characterWidth
-        index += Character.charCount(codePoint)
-    }
-    return index
-}
-
-private fun Int.isWideOnGlasses(): Boolean =
-    this in 0x1100..0x115F ||
-        this in 0x2E80..0xA4CF ||
-        this in 0xAC00..0xD7A3 ||
-        this in 0xF900..0xFAFF ||
-        this in 0xFE10..0xFE19 ||
-        this in 0xFE30..0xFE6F ||
-        this in 0xFF01..0xFF60 ||
-        this in 0xFFE0..0xFFE6 ||
-        this in 0x1F300..0x1FAFF ||
-        this in 0x20000..0x3FFFD

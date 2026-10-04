@@ -1,10 +1,7 @@
 import { ChevronLeft, Send, Wrench } from 'lucide-react'
-import { useState } from 'react'
 import AdvancedTools from './AdvancedTools.jsx'
 import AnswerCard from './AnswerCard.jsx'
-import CurrentSessionMemoryEditor from './CurrentSessionMemoryEditor.jsx'
 import EvidenceStrip from './EvidenceStrip.jsx'
-import MemoryPanel from './MemoryPanel.jsx'
 
 const QUICK_QUESTIONS = [
   'What is in the current scene?',
@@ -15,7 +12,6 @@ const QUICK_QUESTIONS = [
 
 export default function AskPanel({ stream, ask, onOpenLive, onReset }) {
   const disabled = !stream.sessionId || ask.loading || !stream.canAsk
-  const [memoryPublication, setMemoryPublication] = useState(null)
 
   return (
     <section className="ask-panel">
@@ -91,17 +87,11 @@ export default function AskPanel({ stream, ask, onOpenLive, onReset }) {
         error={ask.error}
       />
 
-      <CurrentSessionMemoryEditor
-        sessionId={stream.sessionId}
-        onPublication={setMemoryPublication}
-      />
-
       <EvidenceStrip evidenceFrames={ask.evidenceFrames} />
 
       <div id="advanced-tools">
         <AdvancedTools stream={stream} ask={ask} onReset={onReset} />
       </div>
-      <MemoryPanel authoritativeUpdate={memoryPublication} />
     </section>
   )
 }

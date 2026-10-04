@@ -42,18 +42,6 @@ class MarkdownAnswerFormatterTest {
     }
 
     @Test
-    fun wideChineseCharactersAreWrappedBeforeTheyOverflowTheGlassesScreen() {
-        val line = "当前场景显示在一个室内环境中，画面包含两个主要物体"
-        val pages = line.toMarkdownAnswerPages(charsPerLine = 43, linesPerPage = 6)
-
-        assertEquals(
-            listOf("当前场景显示在一个室内环境中，画面包含两个", "主要物体"),
-            pages.single().map { it.text },
-        )
-        assertEquals(line, pages.flatten().joinToString("") { it.text })
-    }
-
-    @Test
     fun headingBecomesBoldPlainText() {
         val pages = "# Title".toMarkdownAnswerPages(charsPerLine = 21, linesPerPage = 3)
 

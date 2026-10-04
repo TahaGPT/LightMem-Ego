@@ -9,7 +9,6 @@ import {
   getStreamStatus,
   getRokidStatus,
   pauseDemoPlayback,
-  startImageUploadStream,
   startFrameAudioStream,
   startDemoPlayback,
   startDemoTestPlayback,
@@ -39,8 +38,7 @@ export const INPUT_MODES = {
   ROKID: 'rokid_frame_audio',
   ROKID_LIVE_RTMP: 'rokid_live_rtmp',
   DEMO_VIDEO: 'demo_video',
-  DEMO_TEST: 'demo_test',
-  IMAGE_UPLOAD: 'image_upload'
+  DEMO_TEST: 'demo_test'
 }
 
 const CAMERA_FACING = {
@@ -56,11 +54,6 @@ const DEMO_TICK_INTERVAL_MS = 750
 const DEFAULT_INPUT_MODE = INPUT_MODES.FRAME_AUDIO
 const DEFAULT_CAMERA_FACING = CAMERA_FACING.BACK
 const LIVE_INGEST_FAILED_STATES = new Set(['failed', 'aborted', 'cancelled', 'canceled'])
-const IMAGE_UPLOAD_INTERVAL_MS = 60 * 1000
-const IMAGE_UPLOAD_MAX_BYTES = 50 * 1024 * 1024
-const IMAGE_UPLOAD_MAX_FILES = 300
-const IMAGE_UPLOAD_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp'])
-const AUDIO_UPLOAD_TYPES = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/webm', 'audio/flac'])
 
 const EMPTY_ACTIVE_SESSION = {
   sessionId: '',
@@ -161,14 +154,6 @@ export function useRealtimeStream() {
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
   const frameUploadInFlightRef = useRef(false)
-  const imageUploadTimerRef = useRef(null)
-  const imageUploadAbortRef = useRef(null)
-  const imageUploadInFlightRef = useRef(false)
-  const imageUploadStatusRef = useRef('idle')
-  const imageUploadQueueRef = useRef([])
-  const imageUploadIndexRef = useRef(0)
-  const imageUploadNextAtRef = useRef(0)
-  const imageUploadNoWaitRef = useRef(true)
   const frameIndexRef = useRef(0)
   const audioIndexRef = useRef(0)
   const audioChunkStartedAtRef = useRef(0)
@@ -195,12 +180,6 @@ export function useRealtimeStream() {
   const [demoTestBusy, setDemoTestBusy] = useState(false)
   const [demoError, setDemoError] = useState('')
   const [demoClockText, setDemoClockText] = useState('')
-  const [imageUploadQueue, setImageUploadQueue] = useState([])
-  const [imageUploadIndex, setImageUploadIndex] = useState(0)
-  const [imageUploadError, setImageUploadError] = useState('')
-  const [imageUploadStatus, setImageUploadStatus] = useState('idle')
-  const [imageUploadNextAt, setImageUploadNextAt] = useState(0)
-  const [imageUploadNoWait, setImageUploadNoWaitState] = useState(true)
 
   const getDemoPlaybackState = useCallback(() => {
     const video = videoRef.current
@@ -310,142 +289,6 @@ export function useRealtimeStream() {
     }
   }, [])
 
-  const clearImageUploadResources = useCallback(() => {
-    window.clearTimeout(imageUploadTimerRef.current)
-    imageUploadTimerRef.current = null
-    imageUploadAbortRef.current?.abort?.()
-    imageUploadAbortRef.current = null
-    imageUploadInFlightRef.current = false
-    imageUploadQueueRef.current.forEach((item) => {
-      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
-    })
-    imageUploadQueueRef.current = []
-    setImageUploadQueue([])
-    imageUploadIndexRef.current = 0
-    setImageUploadIndex(0)
-    imageUploadNextAtRef.current = 0
-    setImageUploadNextAt(0)
-    imageUploadStatusRef.current = 'idle'
-    setImageUploadStatus('idle')
-    setImageUploadError('')
-  }, [])
-
-  const clearImageUploadTransport = useCallback(() => {
-    window.clearTimeout(imageUploadTimerRef.current)
-    imageUploadTimerRef.current = null
-    imageUploadAbortRef.current?.abort?.()
-    imageUploadAbortRef.current = null
-    imageUploadInFlightRef.current = false
-    imageUploadNextAtRef.current = 0
-    setImageUploadNextAt(0)
-  }, [])
-
-  const setImageUploadFiles = useCallback(async (files) => {
-    const selected = Array.from(files || [])
-    if (selected.length > IMAGE_UPLOAD_MAX_FILES) {
-      setImageUploadError(`Select no more than ${IMAGE_UPLOAD_MAX_FILES} media files.`)
-      return false
-    }
-
-    const queue = []
-    let imageIndex = 0
-    let audioIndex = 0
-    try {
-      for (const file of selected) {
-        const isImage = IMAGE_UPLOAD_TYPES.has(file.type)
-        const isAudio = AUDIO_UPLOAD_TYPES.has(file.type)
-        if (!isImage && !isAudio) throw new Error(`${file.name || 'File'} is not a supported image or audio file.`)
-        if (!file.size) throw new Error(`${file.name || 'File'} is empty.`)
-        if (file.size > IMAGE_UPLOAD_MAX_BYTES) throw new Error(`${file.name || 'File'} exceeds the 50 MiB limit.`)
-        let width = 0
-        let height = 0
-        let durationMs = 0
-        if (isImage && typeof createImageBitmap === 'function') {
-          const bitmap = await createImageBitmap(file)
-          width = bitmap.width
-          height = bitmap.height
-          bitmap.close?.()
-        } else if (isImage) {
-          const preview = URL.createObjectURL(file)
-          try {
-            const image = await new Promise((resolve, reject) => {
-              const element = new Image()
-              element.onload = () => resolve(element)
-              element.onerror = () => reject(new Error('Image could not be decoded.'))
-              element.src = preview
-            })
-            width = image.naturalWidth
-            height = image.naturalHeight
-          } finally {
-            URL.revokeObjectURL(preview)
-          }
-        } else {
-          const preview = URL.createObjectURL(file)
-          try {
-            durationMs = await new Promise((resolve, reject) => {
-              const audio = document.createElement('audio')
-              audio.preload = 'metadata'
-              audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? Math.max(250, Math.round(audio.duration * 1000)) : 1500)
-              audio.onerror = () => reject(new Error('Audio could not be decoded.'))
-              audio.src = preview
-            })
-          } finally {
-            URL.revokeObjectURL(preview)
-          }
-        }
-        if (isImage && (!width || !height)) throw new Error(`${file.name || 'Image'} has invalid dimensions.`)
-        queue.push({
-          file,
-          kind: isImage ? 'image' : 'audio',
-          kindIndex: isImage ? imageIndex++ : audioIndex++,
-          name: file.name || (isImage ? 'image' : 'audio'),
-          size: file.size,
-          type: file.type,
-          width,
-          height,
-          durationMs,
-          previewUrl: isImage ? URL.createObjectURL(file) : ''
-        })
-      }
-    } catch (error) {
-      queue.forEach((item) => URL.revokeObjectURL(item.previewUrl))
-      setImageUploadError(error.message || 'Could not read the selected media files.')
-      return false
-    }
-
-    clearImageUploadResources()
-    imageUploadQueueRef.current = queue
-    setImageUploadQueue(queue)
-    setImageUploadError('')
-    return true
-  }, [clearImageUploadResources])
-
-  const setImageStatus = useCallback((next) => {
-    imageUploadStatusRef.current = next
-    setImageUploadStatus(next)
-  }, [])
-
-  const setImageUploadNoWait = useCallback((value) => {
-    const next = value !== false
-    imageUploadNoWaitRef.current = next
-    setImageUploadNoWaitState(next)
-  }, [])
-
-  const removeImageUploadFile = useCallback((index) => {
-    if (['running', 'starting', 'uploading'].includes(imageUploadStatusRef.current)) return
-    const queue = imageUploadQueueRef.current.slice()
-    const item = queue[index]
-    if (!item) return
-    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
-    queue.splice(index, 1)
-    imageUploadQueueRef.current = queue
-    setImageUploadQueue(queue)
-    if (imageUploadIndexRef.current >= queue.length) {
-      imageUploadIndexRef.current = Math.max(0, queue.length - 1)
-      setImageUploadIndex(imageUploadIndexRef.current)
-    }
-  }, [])
-
   const closePeerConnection = useCallback(() => {
     const peerConnection = peerConnectionRef.current
     peerConnectionRef.current = null
@@ -474,7 +317,6 @@ export function useRealtimeStream() {
 
   const stopLocalMedia = useCallback((options = {}) => {
     clearFrameTransport()
-    clearImageUploadTransport()
     closePeerConnection()
     closePlayback(options)
     clearDemoTickLoop()
@@ -496,7 +338,7 @@ export function useRealtimeStream() {
         videoRef.current.removeAttribute('src')
       }
     }
-  }, [clearDemoClockLoop, clearDemoTickLoop, clearFrameTransport, clearImageUploadTransport, closePeerConnection, closePlayback])
+  }, [clearDemoClockLoop, clearDemoTickLoop, clearFrameTransport, closePeerConnection, closePlayback])
 
   const captureFrame = useCallback(async (epoch) => {
     if (!isCurrentEpoch(epoch) || pausedRef.current || inputModeRef.current !== INPUT_MODES.FRAME_AUDIO) return
@@ -639,182 +481,6 @@ export function useRealtimeStream() {
       setAudioError(error.message || 'Audio recorder failed; video frames will continue.')
     }
   }, [isCurrentEpoch])
-
-  const uploadImageAtIndex = useCallback(async (epoch, index) => {
-    if (!isCurrentEpoch(epoch) || pausedRef.current || inputModeRef.current !== INPUT_MODES.IMAGE_UPLOAD) return false
-    if (imageUploadInFlightRef.current) return false
-    const item = imageUploadQueueRef.current[index]
-    const currentSessionId = sessionIdRef.current
-    if (!item || !currentSessionId) return false
-
-    imageUploadInFlightRef.current = true
-    imageUploadAbortRef.current?.abort?.()
-    const controller = new AbortController()
-    imageUploadAbortRef.current = controller
-    let timedOut = false
-    const timeoutId = window.setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, 300000)
-    setImageStatus('uploading')
-    setImageUploadError('')
-
-    try {
-      const relativeTsMs = imageUploadNoWaitRef.current
-        ? Math.max(0, Date.now() - streamStartTimeRef.current)
-        : index * IMAGE_UPLOAD_INTERVAL_MS
-      const result = item.kind === 'audio'
-        ? await uploadAudioChunk(currentSessionId, item.file, {
-          audioIndex: item.kindIndex,
-          relativeTsMs,
-          durationMs: item.durationMs || 1500,
-          format: getUploadedAudioFormat(item.type),
-          source: 'web_audio_upload',
-          filename: item.name,
-          signal: controller.signal
-        })
-        : await uploadFrame(currentSessionId, item.file, {
-          frameIndex: item.kindIndex,
-          relativeTsMs,
-          width: item.width,
-          height: item.height,
-          format: item.type.split('/')[1] || 'jpg',
-          source: 'web_image_upload',
-          filename: item.name,
-          signal: controller.signal
-        })
-      if (!isCurrentEpoch(epoch) || inputModeRef.current !== INPUT_MODES.IMAGE_UPLOAD) return false
-
-      const nextIndex = index + 1
-      imageUploadIndexRef.current = nextIndex
-      setImageUploadIndex(nextIndex)
-      setStats((current) => ({
-        ...current,
-        frameIndex: current.frameIndex + (item.kind === 'image' ? 1 : 0),
-        audioIndex: current.audioIndex + (item.kind === 'audio' ? 1 : 0),
-        frameUploadedCount: current.frameUploadedCount + (item.kind === 'image' ? 1 : 0),
-        audioUploadedCount: current.audioUploadedCount + (item.kind === 'audio' ? 1 : 0),
-        firstFrameUploaded: current.firstFrameUploaded || item.kind === 'image',
-        canAsk: result.canAsk || result.mcurReady || true,
-        mcurReady: result.mcurReady || current.mcurReady,
-        mcurVersion: result.mcurVersion ?? current.mcurVersion,
-        latestFramePath: item.kind === 'image' ? (result.currentFramePath || result.savedPath || current.latestFramePath) : current.latestFramePath,
-        latestAudioPath: item.kind === 'audio' ? (result.savedPath || current.latestAudioPath) : current.latestAudioPath,
-        lastFrameAt: Date.now()
-      }))
-
-      if (nextIndex >= imageUploadQueueRef.current.length) {
-        imageUploadNextAtRef.current = 0
-        setImageUploadNextAt(0)
-        setImageStatus('completed')
-        setStatus('stopped')
-        return true
-      }
-
-      if (pausedRef.current) {
-        setImageStatus('paused')
-        return true
-      }
-
-      const delay = imageUploadNoWaitRef.current ? 0 : IMAGE_UPLOAD_INTERVAL_MS
-      const nextAt = delay ? Date.now() + delay : 0
-      imageUploadNextAtRef.current = nextAt
-      setImageUploadNextAt(nextAt)
-      setImageStatus('running')
-      imageUploadTimerRef.current = window.setTimeout(() => {
-        uploadImageAtIndex(epoch, nextIndex)
-      }, delay)
-      return true
-    } catch (error) {
-      if (!isCurrentEpoch(epoch)) return false
-      if (error?.name === 'AbortError' && !timedOut) return false
-      setImageUploadError(timedOut ? 'Media upload timed out. Retry to send the same item.' : formatImageUploadError(error, 'Media upload failed.'))
-      setImageStatus('error')
-      setStats((current) => item.kind === 'audio'
-        ? ({ ...current, audioFailedCount: current.audioFailedCount + 1 })
-        : ({ ...current, frameFailedCount: current.frameFailedCount + 1 }))
-      return false
-    } finally {
-      window.clearTimeout(timeoutId)
-      imageUploadInFlightRef.current = false
-      if (imageUploadAbortRef.current === controller) imageUploadAbortRef.current = null
-    }
-  }, [isCurrentEpoch, setImageStatus])
-
-  const startImageUpload = useCallback(async () => {
-    if (!['idle', 'stopped', 'error', 'failed'].includes(status)) return null
-    if (!imageUploadQueueRef.current.length) {
-      setImageUploadError('Select at least one image or audio file to start.')
-      return null
-    }
-
-    const epoch = prepareStart(INPUT_MODES.IMAGE_UPLOAD)
-    setImageStatus('starting')
-    setImageUploadError('')
-    try {
-      const identity = clientIdentityRef.current
-      const info = await startImageUploadStream({
-        ownerId: identity.ownerId,
-        deviceId: identity.webDeviceId,
-        deviceType: 'web',
-        metadata: { client: 'web_frontend' }
-      })
-      if (epochRef.current !== epoch) return null
-      if (!info.sessionId) throw new Error('Stream start failed: session_id missing')
-      streamStartTimeRef.current = Date.now()
-      activeRef.current = true
-      pausedRef.current = false
-      activateSession({ ...info, inputMode: INPUT_MODES.IMAGE_UPLOAD })
-      imageUploadIndexRef.current = 0
-      setImageUploadIndex(0)
-      setStats((current) => ({ ...current, canAsk: !!info.canAsk }))
-      setStatus('running')
-      setImageStatus('running')
-      await uploadImageAtIndex(epoch, 0)
-      return info
-    } catch (error) {
-      if (epochRef.current !== epoch) return null
-      epochRef.current += 1
-      activeRef.current = false
-      stopLocalMedia()
-      setStatus('failed')
-      setImageStatus('error')
-      setImageUploadError(formatImageUploadError(error, 'Photo / Audio Stream start failed.'))
-      return null
-    }
-  }, [activateSession, isCurrentEpoch, setImageStatus, status, stopLocalMedia, uploadImageAtIndex])
-
-  const pauseImageUpload = useCallback(() => {
-    if (inputModeRef.current !== INPUT_MODES.IMAGE_UPLOAD || status !== 'running') return
-    pausedRef.current = true
-    window.clearTimeout(imageUploadTimerRef.current)
-    imageUploadTimerRef.current = null
-    setImageStatus('paused')
-    setStatus('paused')
-  }, [setImageStatus, status])
-
-  const resumeImageUpload = useCallback(() => {
-    if (inputModeRef.current !== INPUT_MODES.IMAGE_UPLOAD || status !== 'paused') return
-    const epoch = epochRef.current
-    pausedRef.current = false
-    setStatus('running')
-    setImageStatus('running')
-    const index = imageUploadIndexRef.current
-    const delay = Math.max(0, imageUploadNextAtRef.current - Date.now())
-    imageUploadTimerRef.current = window.setTimeout(() => {
-      uploadImageAtIndex(epoch, index)
-    }, delay)
-  }, [setImageStatus, status, uploadImageAtIndex])
-
-  const retryImageUpload = useCallback(() => {
-    if (inputModeRef.current !== INPUT_MODES.IMAGE_UPLOAD || imageUploadStatusRef.current !== 'error') return null
-    const epoch = epochRef.current
-    activeRef.current = true
-    pausedRef.current = false
-    setStatus('running')
-    setImageStatus('running')
-    return uploadImageAtIndex(epoch, imageUploadIndexRef.current)
-  }, [setImageStatus, uploadImageAtIndex])
 
   const applyPreviewSnapshot = useCallback((result) => {
     const frameStream = result.frameStream || {}
@@ -1416,9 +1082,6 @@ export function useRealtimeStream() {
       })
     }
     stopLocalMedia()
-    if (currentInputMode === INPUT_MODES.IMAGE_UPLOAD) {
-      clearImageUploadResources()
-    }
 
     if (currentInputMode === INPUT_MODES.WEBRTC_WHIP && currentSessionId) {
       stopLiveIngest(currentSessionId).catch((error) => {
@@ -1447,13 +1110,9 @@ export function useRealtimeStream() {
       frameIndexRef.current = 0
       audioIndexRef.current = 0
     }
-  }, [clearActiveSession, clearDemoClockLoop, clearDemoTickLoop, clearImageUploadResources, getDemoPlaybackState, stopLocalMedia])
+  }, [clearActiveSession, clearDemoTickLoop, getDemoPlaybackState, stopLocalMedia])
 
   const pause = useCallback(() => {
-    if (inputModeRef.current === INPUT_MODES.IMAGE_UPLOAD) {
-      pauseImageUpload()
-      return
-    }
     if (status === 'running' && inputModeRef.current === INPUT_MODES.DEMO_VIDEO) {
       pausedRef.current = true
       clearDemoTickLoop()
@@ -1504,13 +1163,9 @@ export function useRealtimeStream() {
     }
 
     setStatus('paused')
-  }, [clearDemoClockLoop, clearDemoTickLoop, getDemoPlaybackState, pauseImageUpload, sendDemoTick, status, updateDemoClock])
+  }, [clearDemoClockLoop, clearDemoTickLoop, getDemoPlaybackState, sendDemoTick, status, updateDemoClock])
 
   const resume = useCallback(async () => {
-    if (inputModeRef.current === INPUT_MODES.IMAGE_UPLOAD) {
-      resumeImageUpload()
-      return
-    }
     if (status === 'paused' && inputModeRef.current === INPUT_MODES.DEMO_VIDEO) {
       const epoch = epochRef.current
       const currentSessionId = activeSessionRef.current.sessionId
@@ -1564,7 +1219,7 @@ export function useRealtimeStream() {
 
     startFrameLoop(epoch)
     await captureFrame(epoch)
-  }, [captureFrame, getDemoPlaybackState, resumeImageUpload, sendDemoTick, startDemoClockLoop, startDemoTickLoop, startFrameLoop, status])
+  }, [captureFrame, getDemoPlaybackState, sendDemoTick, startDemoClockLoop, startDemoTickLoop, startFrameLoop, status])
 
   const reset = useCallback(() => {
     stop({ clearSession: true })
@@ -1689,9 +1344,6 @@ export function useRealtimeStream() {
   }, [activateSession, applyStatusSnapshot, isCurrentEpoch, prepareStart, startRokidPreviewPolling, startStatusPolling, stopLocalMedia])
 
   const start = useCallback(() => {
-    if (inputModeRef.current === INPUT_MODES.IMAGE_UPLOAD) {
-      return startImageUpload()
-    }
     if (inputModeRef.current === INPUT_MODES.DEMO_TEST) {
       return startDemoTestVideo()
     }
@@ -1705,7 +1357,7 @@ export function useRealtimeStream() {
       return startWebRtcWhip()
     }
     return startFrameAudio()
-  }, [startImageUpload, startRokidSession, startDemoTestVideo, startDemoVideo, startFrameAudio, startWebRtcWhip])
+  }, [startRokidSession, startDemoTestVideo, startDemoVideo, startFrameAudio, startWebRtcWhip])
 
   const refreshStatus = useCallback(async () => {
     const currentSessionId = sessionIdRef.current
@@ -1970,10 +1622,6 @@ export function useRealtimeStream() {
     if (!Object.values(INPUT_MODES).includes(nextInputMode)) return
     if (['starting', 'running', 'publishing', 'live', 'paused', 'stopping'].includes(status)) return
 
-    const previousInputMode = inputModeRef.current
-    if (previousInputMode === INPUT_MODES.IMAGE_UPLOAD && nextInputMode !== INPUT_MODES.IMAGE_UPLOAD) {
-      clearImageUploadResources()
-    }
     inputModeRef.current = nextInputMode
     setInputModeState(nextInputMode)
     setWebrtcState('idle')
@@ -1993,7 +1641,7 @@ export function useRealtimeStream() {
     setStats(initialStats)
     setStreamError('')
     setAudioError('')
-  }, [bindDemoTestVideo, bindDemoVideo, clearActiveSession, clearDemoClockLoop, clearImageUploadResources, status])
+  }, [bindDemoTestVideo, bindDemoVideo, clearActiveSession, clearDemoClockLoop, status])
 
   useEffect(() => {
     return () => {
@@ -2031,25 +1679,21 @@ export function useRealtimeStream() {
   const activeIsRokid = activeInputMode === INPUT_MODES.ROKID || activeIsRokidLive
   const activeIsDemo = activeInputMode === INPUT_MODES.DEMO_VIDEO
   const activeIsDemoTest = activeInputMode === INPUT_MODES.DEMO_TEST
-  const activeIsImageUpload = activeInputMode === INPUT_MODES.IMAGE_UPLOAD
   const isLegacyDemoMode = inputMode === INPUT_MODES.DEMO_VIDEO || activeIsDemo
   const isDemoTestMode = inputMode === INPUT_MODES.DEMO_TEST || activeIsDemoTest
   const isDemoMode = isLegacyDemoMode || isDemoTestMode
-  const isImageUploadMode = inputMode === INPUT_MODES.IMAGE_UPLOAD || activeIsImageUpload
   const isRokidLiveMode = inputMode === INPUT_MODES.ROKID_LIVE_RTMP || activeIsRokidLive
   const isRokidMode = inputMode === INPUT_MODES.ROKID || inputMode === INPUT_MODES.ROKID_LIVE_RTMP || activeIsRokid
   const canStart = ['idle', 'stopped', 'error', 'failed'].includes(status)
-  const canChangeInputMode = canStart
-  const canStartSelectedMode = canStart && (!isImageUploadMode || imageUploadQueue.length > 0)
   const isLive = ['running', 'publishing', 'live', 'preview_fallback'].includes(status)
   const isPaused = status === 'paused'
   const isBusy = status === 'starting' || status === 'stopping'
   const canUseMediaDevices = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
-  const canFlipCamera = !activeIsRokid && !isDemoMode && !isImageUploadMode && !isBusy && status !== 'publishing' && !cameraSwitching && canUseMediaDevices
+  const canFlipCamera = !activeIsRokid && !isDemoMode && !isBusy && status !== 'publishing' && !cameraSwitching && canUseMediaDevices
   const canPause = !isWebRtcMode && !activeIsRokid && status === 'running'
   const memoryReady = !!(stats.canAsk || stats.firstFrameUploaded || statusSnapshot?.canAsk)
   const demoSessionId = isDemoTestMode ? demoTestSession.sessionId : demoSession.sessionId
-  const effectiveCanAsk = !!(activeSessionId || (isDemoMode && demoSessionId)) && (activeIsWebRtc || activeIsRokidLive || isDemoMode || isImageUploadMode || memoryReady)
+  const effectiveCanAsk = !!(activeSessionId || (isDemoMode && demoSessionId)) && (activeIsWebRtc || activeIsRokidLive || isDemoMode || memoryReady)
   const effectiveSessionId = activeSessionId || (isDemoMode ? demoSessionId : '')
   const activeDemoTestClip = getDemoTestActiveClip(demoTestSession)
   const demoVideoUrl = isDemoTestMode ? (activeRef.current ? (activeDemoTestClip?.videoUrlResolved || '') : '') : demoSession.videoUrl
@@ -2082,17 +1726,10 @@ export function useRealtimeStream() {
     inputMode,
     setInputMode,
     isWebRtcMode,
-    modeLabel: isDemoTestMode ? 'Demo Test' : (isLegacyDemoMode ? 'Demo Video' : (isImageUploadMode ? 'Photo / Audio Stream' : (isRokidMode ? (isRokidLiveMode ? 'Rokid RTMP Live' : 'Rokid Glass') : (isWebRtcMode ? 'WebRTC Live Stream' : 'Frame · Audio HTTP')))),
+    modeLabel: isDemoTestMode ? 'Demo Test' : (isLegacyDemoMode ? 'Demo Video' : (isRokidMode ? (isRokidLiveMode ? 'Rokid RTMP Live' : 'Rokid Glass') : (isWebRtcMode ? 'WebRTC Live Stream' : 'Frame · Audio HTTP'))),
     isDemoMode,
     isLegacyDemoMode,
     isDemoTestMode,
-    isImageUploadMode,
-    imageUploadQueue,
-    imageUploadIndex,
-    imageUploadStatus,
-    imageUploadError,
-    imageUploadNextAt,
-    imageUploadNoWait,
     demoSession,
     demoTestSession,
     demoVideoUrl,
@@ -2139,8 +1776,6 @@ export function useRealtimeStream() {
     liveIngestAudioChunks: liveIngest.audioChunksIngested ?? live.audioChunksIngested ?? 0,
     liveIngestLastError: liveIngest.lastError || live.lastError || '',
     canStart,
-    canStartSelectedMode,
-    canChangeInputMode,
     isLive,
     isPaused,
     isBusy,
@@ -2149,15 +1784,9 @@ export function useRealtimeStream() {
     memoryReady,
     canAsk: effectiveCanAsk,
     start,
-    startImageUpload,
     stop,
     pause,
     resume,
-    setImageUploadFiles,
-    setImageUploadNoWait,
-    removeImageUploadFile,
-    clearImageUploadFiles: clearImageUploadResources,
-    retryImageUpload,
     uploadDemo,
     uploadDemoTest,
     setDemoTestActiveClip,
@@ -2203,8 +1832,6 @@ export function useRealtimeStream() {
     liveIngestStatus,
     live,
     canStart,
-    canStartSelectedMode,
-    canChangeInputMode,
     isLive,
     isPaused,
     isBusy,
@@ -2215,13 +1842,6 @@ export function useRealtimeStream() {
     isDemoMode,
     isLegacyDemoMode,
     isDemoTestMode,
-    isImageUploadMode,
-    imageUploadQueue,
-    imageUploadIndex,
-    imageUploadStatus,
-    imageUploadError,
-    imageUploadNextAt,
-    imageUploadNoWait,
     demoSession,
     demoTestSession,
     demoVideoUrl,
@@ -2235,15 +1855,9 @@ export function useRealtimeStream() {
     isRokidMode,
     isRokidLiveMode,
     start,
-    startImageUpload,
     stop,
     pause,
     resume,
-    setImageUploadFiles,
-    setImageUploadNoWait,
-    removeImageUploadFile,
-    clearImageUploadResources,
-    retryImageUpload,
     uploadDemo,
     uploadDemoTest,
     setDemoTestActiveClip,
@@ -2256,25 +1870,6 @@ export function useRealtimeStream() {
     reset,
     refreshStatus
   ])
-}
-
-function formatImageUploadError(error, fallback = 'Media upload failed.') {
-  if (!error) return fallback
-  if (error.name === 'AbortError') return 'Media upload was cancelled.'
-  if (error.status === 413) return 'The selected media file is too large for the server.'
-  if (error.status >= 500) return 'Photo / Audio Stream service is temporarily unavailable.'
-  if (error.status === 400 || error.status === 422) return 'The selected media file was rejected by the server.'
-  return fallback
-}
-
-function getUploadedAudioFormat(mimeType = '') {
-  if (mimeType === 'audio/mpeg' || mimeType === 'audio/mp3') return 'mp3'
-  if (mimeType === 'audio/mp4' || mimeType === 'audio/x-m4a') return 'm4a'
-  if (mimeType === 'audio/wav' || mimeType === 'audio/x-wav') return 'wav'
-  if (mimeType === 'audio/aac') return 'aac'
-  if (mimeType === 'audio/ogg') return 'ogg'
-  if (mimeType === 'audio/flac') return 'flac'
-  return 'webm'
 }
 
 async function requestCameraAndMic(options = {}) {

@@ -1201,15 +1201,9 @@ from dataclasses import dataclass, field
 from PIL import Image
 
 from ...embedding import EmbeddingModel
+from ..timestamp_utils import memory_timestamp_range
 
 logger = logging.getLogger(__name__)
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)) or default)
-    except (TypeError, ValueError):
-        return default
 
 
 @dataclass
@@ -1229,10 +1223,7 @@ class VideoClipEntry:
 
     @property
     def timestamp_int(self) -> Tuple[int, int]:
-        day = self.date.replace('DAY', '').replace('Day', '')
-        start_ts = int(day + self.start_time.zfill(8))
-        end_ts = int(day + self.end_time.zfill(8))
-        return start_ts, end_ts
+        return memory_timestamp_range(self.date, self.start_time, self.end_time)
 
     def to_display_str(self) -> str:
         start_ts, end_ts = self.timestamp_int
@@ -1477,29 +1468,6 @@ class VisualMemory:
         1. keyframe_paths
         2. fallback to a few uniformly sampled frames from video_path
         """
-        # Keep this low-level accessor aligned with the query contract too, so
-        # callers cannot accidentally turn a request-wide value (for example
-        # 9) into nine images for each event.
-        configured_per_event = max(0, _env_int("EM2MEM_IMAGES_PER_EVIDENCE_LIMIT", 3))
-        try:
-            requested_per_event = int(max_images_per_event)
-        except (TypeError, ValueError):
-            requested_per_event = configured_per_event
-        if requested_per_event > 0:
-            max_images_per_event = min(requested_per_event, configured_per_event)
-        else:
-            max_images_per_event = configured_per_event
-        configured_total = max(0, _env_int("EM2MEM_QUERY_MAX_TOTAL_IMAGES", 9))
-        if total_max_images is None:
-            total_max_images = configured_total
-        else:
-            try:
-                total_max_images = min(max(0, int(total_max_images)), configured_total)
-            except (TypeError, ValueError):
-                total_max_images = configured_total
-        if max_images_per_event <= 0 or total_max_images <= 0:
-            return {}
-
         result: Dict[str, List[Image.Image]] = {}
         total_images = 0
 

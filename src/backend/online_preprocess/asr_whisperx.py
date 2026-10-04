@@ -122,7 +122,7 @@ def _resolve_asr_model_name_or_path(model_name: str, model_dir: str | None) -> s
             return model_name
 
     # Support Hugging Face snapshot-style caches copied under models/whisperx.
-    snapshot_root = candidates[2]
+    snapshot_root = candidates[1]
     if snapshot_root.exists():
         snapshots = sorted([p for p in snapshot_root.iterdir() if p.is_dir()])
         if snapshots:

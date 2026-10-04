@@ -48,7 +48,7 @@ class RetrievalPlanner:
         )
         final_k = self._final_evidence_budget(query_type=query_type, requested=requested_final_k)
         frames_k = _env_int("EM2MEM_FINAL_EVIDENCE_FRAMES_K", _env_int("EM2MEM_QUERY_ROUTER_EVIDENCE_FRAMES_K", 5))
-        max_images_default = _env_int("EM2MEM_FINAL_MAX_IMAGE_EVIDENCE", _env_int("EM2MEM_QUERY_ROUTER_MAX_IMAGE_EVIDENCE", 9))
+        max_images_default = _env_int("EM2MEM_FINAL_MAX_IMAGE_EVIDENCE", _env_int("EM2MEM_QUERY_ROUTER_MAX_IMAGE_EVIDENCE", 3))
 
         mlt_mode = self._default_mlt_mode(query_type)
         retrieval_mode_source = "auto"

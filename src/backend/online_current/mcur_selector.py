@@ -94,10 +94,6 @@ class MCurFrameSelector:
                 "source_path": frame.get("source_path"),
                 "diff_score": frame.get("diff_score"),
                 "role": frame.get("role"),
-                # Treat the rolling current window as one evidence segment so
-                # downstream packing applies the same three-image budget.
-                "segment_id": "M_cur",
-                "canonical_segment_id": "M_cur",
                 "source": "M_cur",
             }
             for frame in selected

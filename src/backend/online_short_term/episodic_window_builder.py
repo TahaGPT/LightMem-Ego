@@ -7,13 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from online_preprocess.io_utils import utc_now_iso
-from online_llm_config import (
-    external_openai_api_key,
-    external_openai_base_url,
-    external_openai_model,
-    local_llm_enabled,
-    merge_local_chat_request_kwargs,
-)
+from online_llm_config import local_llm_enabled, merge_local_chat_request_kwargs
 
 
 SYSTEM_PROMPT = """You are building a 30-second episodic memory unit for a long-video memory system.
@@ -194,7 +188,7 @@ class MSTEpisodicWindowBuilder:
         retries: int | None = None,
     ) -> None:
         self.backend = (backend or os.getenv("EM2MEM_MST_EPISODIC_BACKEND", "openai")).strip().lower()
-        self.model = model or external_openai_model()
+        self.model = model or os.getenv("EM2MEM_MST_EPISODIC_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5.4"
         self.timeout = float(timeout or os.getenv("EM2MEM_MST_EPISODIC_TIMEOUT", "120"))
         self.retries = int(retries if retries is not None else os.getenv("EM2MEM_MST_EPISODIC_RETRIES", "3"))
         self._client = None
@@ -383,8 +377,8 @@ class MSTEpisodicWindowBuilder:
             raise RuntimeError("openai package is required for EM2MEM_MST_EPISODIC_BACKEND=openai") from exc
         if self._client is None:
             self._client = OpenAI(
-                api_key=external_openai_api_key(),
-                base_url=external_openai_base_url(),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE"),
                 timeout=self.timeout,
             )
         events_json = json.dumps([_event_payload(event) for event in events], ensure_ascii=False, indent=2)
@@ -397,8 +391,9 @@ class MSTEpisodicWindowBuilder:
         last_exc = None
         for _ in range(max(1, self.retries)):
             try:
-                request_kwargs = merge_local_chat_request_kwargs(_reasoning_effort_kwargs(), enabled=False)
-                request_kwargs["response_format"] = {"type": "json_object"}
+                request_kwargs = merge_local_chat_request_kwargs(_reasoning_effort_kwargs())
+                if local_llm_enabled():
+                    request_kwargs["response_format"] = {"type": "json_object"}
                 try:
                     response = self._client.chat.completions.create(
                         model=self.model,

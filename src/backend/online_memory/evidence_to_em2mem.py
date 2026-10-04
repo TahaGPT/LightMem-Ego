@@ -11,7 +11,6 @@ from typing import Any
 from online_preprocess.io_utils import read_json, write_json
 
 from .em2mem_layout import Em2MemOnlineLayout, hhmmssff_to_seconds, seconds_to_hhmmssff
-from online_memory.content import effective_episodic_content
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 for _path in (PROJECT_ROOT / "src", PROJECT_ROOT / "src" / "HippoRAG" / "src"):
@@ -361,9 +360,10 @@ def _aggregate_caption_group(group: list[dict[str, Any]], scale: str, idx: int) 
     doc_id = f"{first['session_id']}_{date}_{scale}_{idx:04d}_{first['start_time']}_{last['end_time']}"
     text_parts = []
     for item in group:
-        text = effective_episodic_content(item)
-        if text:
-            text_parts.append(text)
+        if item.get("fine_caption"):
+            text_parts.append(str(item["fine_caption"]))
+        elif item.get("text"):
+            text_parts.append(str(item["text"]))
     keyframes = []
     for item in group:
         keyframes.extend(item.get("keyframe_paths", []) or [])
@@ -504,7 +504,8 @@ def _load_caption_file(path: Path) -> list[dict[str, Any]]:
 
 def _item_text_for_openie(item: dict[str, Any]) -> str:
     parts = [
-        _clean_text(effective_episodic_content(item)),
+        _clean_text(item.get("text")),
+        _clean_text(item.get("fine_caption")),
         _clean_text(item.get("transcript")),
         _clean_text(item.get("keyframe_caption")),
     ]
@@ -633,7 +634,7 @@ def write_sidecar_files(
                 "date": item["date"],
                 "start_time": item["start_time"],
                 "end_time": item["end_time"],
-                "text": effective_episodic_content(item),
+                "text": item.get("text", ""),
                 "fine_caption": item.get("fine_caption", ""),
                 "video_path": item.get("video_path", ""),
                 "source_doc_ids": item.get("source_doc_ids", []),
@@ -686,7 +687,7 @@ def _build_graph_payload(items: list[dict[str, Any]], triplet_map: dict[str, lis
             "id": event_id,
             "type": "Event",
             "label": doc_id,
-            "text": effective_episodic_content(item),
+            "text": item.get("text", ""),
             "visual_summary": item.get("visual_summary", ""),
             "action_threads": item.get("action_threads", []),
             "object_threads": item.get("object_threads", []),

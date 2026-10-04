@@ -15,7 +15,7 @@ VENV_DIR="${EM2MEM_LOCAL_LLM_VENV:-$ROOT_DIR/.venv_vllm}"
 MODEL_PATH="${EM2MEM_LOCAL_LLM_MODEL_PATH:-$ROOT_DIR/models/Qwen3.5-9B}"
 HOST="${EM2MEM_LOCAL_LLM_HOST:-127.0.0.1}"
 PORT="${EM2MEM_LOCAL_LLM_PORT:-18100}"
-SERVED_MODEL="${EM2MEM_LOCAL_LLM_SERVED_MODEL:-Qwen3.5-9B}"
+SERVED_MODEL="${EM2MEM_LOCAL_LLM_SERVED_MODEL:-gpt-5.4}"
 GPU="${EM2MEM_LOCAL_LLM_CUDA_VISIBLE_DEVICES:-2}"
 MAX_MODEL_LEN="${EM2MEM_LOCAL_LLM_MAX_MODEL_LEN:-16384}"
 GPU_MEMORY_UTILIZATION="${EM2MEM_LOCAL_LLM_GPU_MEMORY_UTILIZATION:-0.94}"
@@ -61,6 +61,6 @@ exec "$VENV_DIR/bin/vllm" serve "$MODEL_PATH" \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --enforce-eager \
-  --limit-mm-per-prompt '{"image":9,"video":0}' \
+  --limit-mm-per-prompt '{"image":4,"video":0}' \
   --reasoning-parser qwen3 \
   --trust-remote-code

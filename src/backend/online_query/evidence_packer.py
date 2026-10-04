@@ -90,8 +90,7 @@ class EvidencePacker:
         use_image = bool(route_decision.get("use_image_evidence", False))
         max_images = int(route_decision.get("max_image_evidence") or 0)
         per_evidence_image_limit = max(0, _env_int("EM2MEM_IMAGES_PER_EVIDENCE_LIMIT", 3))
-        configured_total_limit = max(0, _env_int("EM2MEM_QUERY_MAX_TOTAL_IMAGES", 9))
-        total_image_limit = min(max_images, configured_total_limit) if max_images > 0 else 0
+        total_image_limit: int | None = None
 
         text_results = list(retrieval_result.get("text_results", []) or [])[:text_limit]
         fused_results = list(retrieval_result.get("fused_results", []) or [])[:final_limit]
@@ -127,22 +126,7 @@ class EvidencePacker:
             if path
         ]
         if use_image and preferred_current_images:
-            # The current rolling window is a single evidence segment. Keep
-            # its preferred images ahead of long-term candidates, but do not
-            # let the additional ranked current frames bypass the per-evidence
-            # cap when they are merged back in.
-            preferred_current_images = preferred_current_images[:per_evidence_image_limit]
-            current_frame_paths = {
-                str(frame.get("path") or frame.get("image_path") or "")
-                for frame in current_frames
-                if isinstance(frame, dict) and (frame.get("path") or frame.get("image_path"))
-            }
-            non_current_images = [path for path in selected_images if path not in current_frame_paths]
-            selected_images = self._merge_preferred_images(
-                preferred_current_images,
-                non_current_images,
-                total_image_limit,
-            )
+            selected_images = self._merge_preferred_images(preferred_current_images, selected_images, total_image_limit)
 
         prompt_visual = []
         seen_visual = set()
@@ -267,9 +251,6 @@ class EvidencePacker:
                 _safe_float(item.get("visual_score")),
                 _safe_float(item.get("text_score")),
             )
-            if not item.get("segment_id") and not item.get("canonical_segment_id") and item.get("source") == "M_cur":
-                item["segment_id"] = "M_cur"
-                item["canonical_segment_id"] = "M_cur"
             frames.append(item)
         for fused in fused_results:
             for visual in fused.get("visual_items", []) or []:

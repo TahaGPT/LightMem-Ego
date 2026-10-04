@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide describes how to deploy the Em2Mem Online Server on a new GPU server with internet access. It assumes the API server, workers, model caches, and optional SRS live media service run on the same machine, so no relay or SSH tunnel is required.
+This guide describes how to deploy the LightMem-Ego Backend on a new GPU server with internet access. It assumes the API server, workers, model caches, and optional SRS live media service run on the same machine, so no relay or SSH tunnel is required.
 
 ## Target Layout
 
@@ -163,11 +163,8 @@ scripts/download_local_qwen35_model.sh
 ```
 
 The default deployment uses GPU 2, a 16K context window, two active sequences,
-and up to nine images per prompt. The backend sends at most three images for
-each evidence segment and caps the complete request at nine images, matching
-`--limit-mm-per-prompt '{"image":9,"video":0}'`. It disables Qwen thinking
-output so existing JSON parsers and answer streaming receive only final
-content.
+and up to four images per prompt. It disables Qwen thinking output so existing
+JSON parsers and answer streaming receive only final content.
 
 Select the local profile and restart workers while keeping the public API up:
 
@@ -190,10 +187,10 @@ scripts/select_llm_profile.sh remote
 scripts/stop_server_and_workers.sh --keep-api --force
 ```
 
-The implementation is maintained on the `feature/local-qwen35-9b` branch.
-Switching back to `main` restores the original code at commit `f1195a2`.
-Select the remote profile before switching branches if the local model should
-also release GPU memory.
+Both local and remote profiles are maintained in the backend code. Profile
+selection is runtime configuration and does not require switching Git branches.
+Select the remote profile and restart the workers when the local model should
+release GPU memory.
 
 ## Rolling Audio ASR Defaults
 
@@ -227,7 +224,7 @@ Open or proxy these ports as needed:
 - `1935/tcp`: RTMP publish and pull.
 - `1985/tcp`: SRS HTTP API and WHIP endpoint in the bundled helper.
 - `8080/tcp`: SRS HTTP server, if enabled.
-- `8000/tcp`: Em2Mem API.
+- `8000/tcp`: LightMem-Ego API.
 
 Production deployments should add TLS, authentication, reverse proxy rules, and firewall policy outside this repository.
 

@@ -34,12 +34,6 @@ from online_query.evidence_sufficiency import EvidenceSufficiencyEvaluator, appl
 from online_short_term.mst_retriever import MSTRetriever
 from online_short_term.mst_store import MSTStore
 from online_query.stream_query_context import load_stream_query_context
-from online_llm_config import (
-    external_openai_api_key,
-    external_openai_base_url,
-    local_openai_api_key,
-    local_openai_base_url,
-)
 from online_pipeline.stream_timeline import append_timeline_event
 from online_pipeline.rokid_day import (
     query_memory_ready,
@@ -303,15 +297,6 @@ def _env_int(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)))
     except Exception:
         return default
-
-
-def _effective_total_image_limit(requested: Any) -> int:
-    configured = max(0, _env_int("EM2MEM_QUERY_MAX_TOTAL_IMAGES", 9))
-    try:
-        requested_value = max(0, int(requested or 0))
-    except (TypeError, ValueError):
-        requested_value = 0
-    return min(requested_value, configured)
 
 
 def _answer_language_instruction() -> str:
@@ -840,12 +825,10 @@ def _apply_image_fallback_to_route(route_decision: dict[str, Any], diagnostics: 
     route_decision["use_image_evidence"] = True
     route_decision["use_image_evidence_source"] = "auto_partial_memory_fallback"
     requested_max_images = max(0, int(route_decision.get("max_image_evidence") or 0))
-    fallback_max_images = max(0, _env_int("EM2MEM_PARTIAL_MEMORY_IMAGE_FALLBACK_MAX_IMAGES", 3))
-    per_evidence_limit = max(0, _env_int("EM2MEM_IMAGES_PER_EVIDENCE_LIMIT", 3))
-    fallback_cap = min(fallback_max_images, per_evidence_limit) if per_evidence_limit > 0 else 0
+    fallback_max_images = max(0, _env_int("EM2MEM_PARTIAL_MEMORY_IMAGE_FALLBACK_MAX_IMAGES", 4))
     route_decision["max_image_evidence"] = min(
-        max(requested_max_images, fallback_cap),
-        fallback_cap,
+        max(requested_max_images, 1 if fallback_max_images > 0 else 0),
+        1,
     )
     route_decision["evidence_frames_k"] = max(
         int(route_decision.get("evidence_frames_k") or 0),
@@ -1720,7 +1703,7 @@ class LoadedQueryEngine:
         top_k: int = 5,
         latency: dict[str, Any] | None = None,
         use_image_evidence: Any = "auto",
-        max_image_frames: int = 3,
+        max_image_frames: int = 4,
         retrieval_mode: str = "auto",
         max_image_evidence: int | None = None,
         text_top_k: int | None = None,
@@ -2818,7 +2801,6 @@ class LoadedQueryEngine:
                     fused_results=fused_results,
                     max_image_evidence=max_image_evidence,
                 )
-            image_paths_used = image_paths_used[:_effective_total_image_limit(max_image_evidence)]
             runtime_dir = getattr(self, "runtime_session_dir", self.session_dir)
             for rel_path in image_paths_used:
                 base_dir = runtime_dir if _image_path_runtime_scoped(rel_path) else self.session_dir
@@ -3055,7 +3037,7 @@ class LoadedQueryEngine:
         fused_results: list[dict[str, Any]],
         max_image_evidence: int,
     ) -> tuple[list[str], list[str]]:
-        max_image_evidence = _effective_total_image_limit(max_image_evidence)
+        max_image_evidence = max(0, int(max_image_evidence or 0))
         if max_image_evidence <= 0:
             return [], []
         per_evidence_image_limit = max(1, _env_int("EM2MEM_IMAGES_PER_EVIDENCE_LIMIT", 3))
@@ -3086,8 +3068,6 @@ class LoadedQueryEngine:
             selected.append(rel_path)
             seen_paths.add(rel_path)
             seen_segments[segment_id] = seen_segments.get(segment_id, 0) + 1
-            if len(selected) >= max_image_evidence:
-                break
         return selected, warnings
 
     def _timestamps_from_visual_results(self, fused_results: list[dict[str, Any]]) -> list[dict[str, float]]:
@@ -3211,9 +3191,7 @@ class LoadedQueryEngine:
             fused_score = 0.6 * text_score + 0.4 * visual_score
             cache_boost, cache_reasons = self._cache_boost_for_segment(seg, item, cache_context)
             fused_score = min(1.0, fused_score + cache_boost)
-            # Keep enough visual candidates for the per-evidence three-frame
-            # budget; the evidence packer applies the request-wide cap later.
-            best_visual = sorted(item["visual_items"], key=lambda x: -float(x.get("visual_score") or 0.0))[:3]
+            best_visual = sorted(item["visual_items"], key=lambda x: -float(x.get("visual_score") or 0.0))[:2]
             fused.append({
                 "segment_id": seg,
                 "canonical_segment_id": seg,
@@ -3296,13 +3274,6 @@ class LoadedQueryEngine:
                 if not path or path in seen:
                     continue
                 seen.add(path)
-                segment_id = str(
-                    item.get("canonical_segment_id")
-                    or item.get("segment_id")
-                    or fused.get("canonical_segment_id")
-                    or fused.get("segment_id")
-                    or path
-                )
                 frames.append({
                     "path": path,
                     "timestamp": (
@@ -3313,8 +3284,6 @@ class LoadedQueryEngine:
                     "caption": item.get("keyframe_caption", ""),
                     "visual_score": item.get("visual_score"),
                     "fused_score": fused.get("fused_score"),
-                    "segment_id": segment_id,
-                    "canonical_segment_id": _canonical_segment_id(segment_id),
                     "source": "hybrid_retrieval",
                 })
         return frames
@@ -3325,13 +3294,6 @@ class LoadedQueryEngine:
         for event in selected_events:
             doc_id = str(event.get("doc_id") or "")
             evidence = self.evidence_by_doc_id.get(doc_id) or self.evidence_by_doc_id.get(_canonical_segment_id(doc_id)) or {}
-            segment_id = str(
-                (evidence.get("segment_id") if isinstance(evidence, dict) else None)
-                or event.get("segment_id")
-                or event.get("canonical_segment_id")
-                or doc_id
-            )
-            canonical_segment_id = _canonical_segment_id(segment_id)
             frame_by_path = {}
             if isinstance(evidence, dict):
                 for item in evidence.get("keyframe_captions", []) or []:
@@ -3348,8 +3310,6 @@ class LoadedQueryEngine:
                         "path": path,
                         "timestamp": _keyframe_timestamp(path, evidence_frame),
                         "caption": str((evidence_frame or {}).get("caption", event.get("keyframe_caption", "")) or ""),
-                        "segment_id": segment_id,
-                        "canonical_segment_id": canonical_segment_id,
                     }
                 )
         return frames
@@ -3461,7 +3421,6 @@ def load_query_engine(
     session_id: str,
     sessions_root: Path = Path("online_sessions"),
     long_term_retrieval_scheme: str | None = None,
-    memory_config_override: tuple[Path, dict[str, Any]] | None = None,
 ) -> LoadedQueryEngine:
     query_rag = _query_rag_helpers()
     long_term_retrieval_scheme = normalize_long_term_retrieval_scheme(long_term_retrieval_scheme)
@@ -3469,15 +3428,7 @@ def load_query_engine(
     session_dir = sessions_root / session_id
     if not session_dir.exists():
         raise FileNotFoundError(f"session not found: {session_dir}")
-    if memory_config_override is None:
-        memory_config_path, config = _load_memory_config(session_dir)
-    else:
-        memory_config_path, override_config = memory_config_override
-        config = dict(override_config)
-        if not memory_config_path.exists():
-            raise FileNotFoundError(f"memory config override not found: {memory_config_path}")
-        if config.get("status") != "memory_ready":
-            raise RuntimeError("memory is not ready")
+    memory_config_path, config = _load_memory_config(session_dir)
     config["long_term_retrieval_scheme"] = long_term_retrieval_scheme
     strict_load_only = _env_bool("EM2MEM_QUERY_STRICT_LOAD_ONLY", True)
     if strict_load_only:
@@ -3518,23 +3469,8 @@ def load_query_engine(
 
     embedding_model = EmbeddingModel()
     answer_retries = _env_int("EM2MEM_QUERY_ANSWER_RETRIES", 3)
-    retriever_llm_model = LLMModel(
-        model_name=retriever_model_name,
-        provider="openai",
-        max_retries=answer_retries,
-        api_key=external_openai_api_key(),
-        base_url=external_openai_base_url(),
-        local_mode=False,
-    )
-    respond_llm_model = LLMModel(
-        model_name=respond_model_name,
-        provider="openai",
-        fps=1,
-        max_retries=answer_retries,
-        api_key=local_openai_api_key(),
-        base_url=local_openai_base_url(),
-        local_mode=True,
-    )
+    retriever_llm_model = LLMModel(model_name=retriever_model_name, max_retries=answer_retries)
+    respond_llm_model = LLMModel(model_name=respond_model_name, fps=1, max_retries=answer_retries)
     prompt_template_manager = PromptTemplateManager()
     em2mem_memory = EM2Memory(
         embedding_model=embedding_model,
@@ -3788,15 +3724,7 @@ def _get_short_term_answer_model() -> Any:
     key = (model_name, retries)
     if key not in _SHORT_TERM_ANSWER_MODELS:
         _, LLMModel, _, _, _ = _em2mem_classes()
-        _SHORT_TERM_ANSWER_MODELS[key] = LLMModel(
-            model_name=model_name,
-            provider="openai",
-            fps=1,
-            max_retries=retries,
-            api_key=local_openai_api_key(),
-            base_url=local_openai_base_url(),
-            local_mode=True,
-        )
+        _SHORT_TERM_ANSWER_MODELS[key] = LLMModel(model_name=model_name, fps=1, max_retries=retries)
     return _SHORT_TERM_ANSWER_MODELS[key]
 
 
@@ -3873,9 +3801,7 @@ def _answer_current_memory(
         cache_context=cache_context,
     )
     pack_ms = _ms(pack_start)
-    selected_image_paths = list(pack_result.get("selected_image_paths_for_mllm") or [])[
-        :_effective_total_image_limit(max_images)
-    ]
+    selected_image_paths = list(pack_result.get("selected_image_paths_for_mllm") or [])
     if not use_image:
         selected_image_paths = []
 
@@ -4253,9 +4179,7 @@ def _query_short_term_only(
     )
     pack_ms = _ms(pack_start)
     evidence_frames = pack_result.get("selected_evidence_frames", [])
-    selected_image_paths = list(pack_result.get("selected_image_paths_for_mllm") or [])[
-        :_effective_total_image_limit(route_decision.get("max_image_evidence"))
-    ]
+    selected_image_paths = list(pack_result.get("selected_image_paths_for_mllm") or [])
     timestamps = [
         {"start": _safe_float(item.get("start_time")), "end": _safe_float(item.get("end_time"))}
         for item in short_term_results
@@ -4433,9 +4357,9 @@ def query_session(
     cache: Any = None,
     output_json: Path | None = None,
     use_image_evidence: Any = "auto",
-    max_image_frames: int = 3,
+    max_image_frames: int = 4,
     retrieval_mode: str = "auto",
-    max_image_evidence: int | None = 9,
+    max_image_evidence: int | None = 3,
     text_top_k: int | None = None,
     visual_top_k: int | None = None,
     final_evidence_k: int | None = None,

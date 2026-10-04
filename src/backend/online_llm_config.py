@@ -19,11 +19,9 @@ def local_llm_enabled() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def local_chat_request_kwargs(enabled: bool | None = None) -> dict[str, Any]:
+def local_chat_request_kwargs() -> dict[str, Any]:
     """Return OpenAI SDK kwargs needed by the local Qwen chat template."""
-    if enabled is None:
-        enabled = local_llm_enabled()
-    if not enabled:
+    if not local_llm_enabled():
         return {}
     non_thinking = os.getenv("EM2MEM_LOCAL_LLM_NON_THINKING", "1")
     if non_thinking.strip().lower() not in {"1", "true", "yes", "on"}:
@@ -38,9 +36,9 @@ def local_chat_request_kwargs(enabled: bool | None = None) -> dict[str, Any]:
     }
 
 
-def merge_local_chat_request_kwargs(kwargs: dict[str, Any], enabled: bool | None = None) -> dict[str, Any]:
+def merge_local_chat_request_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     merged = dict(kwargs)
-    local_kwargs = local_chat_request_kwargs(enabled=enabled)
+    local_kwargs = local_chat_request_kwargs()
     if not local_kwargs:
         return merged
 
@@ -62,26 +60,3 @@ def local_cache_namespace() -> str:
         return ""
     value = os.getenv("EM2MEM_LOCAL_LLM_CACHE_NAMESPACE", "local_qwen35")
     return value.strip().replace("-", "_")
-
-
-def external_openai_api_key() -> str | None:
-    return os.getenv("EM2MEM_EXTERNAL_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-
-
-def external_openai_base_url() -> str | None:
-    return os.getenv("EM2MEM_EXTERNAL_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE")
-
-
-def external_openai_model() -> str:
-    return os.getenv("EM2MEM_EXTERNAL_OPENAI_MODEL") or os.getenv("EM2MEM_MST_REFINE_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5.4"
-
-
-def local_openai_api_key() -> str:
-    return os.getenv("EM2MEM_LOCAL_LLM_API_KEY", "local-qwen35")
-
-
-def local_openai_base_url() -> str:
-    return os.getenv(
-        "EM2MEM_LOCAL_LLM_BASE_URL",
-        f"http://{os.getenv('EM2MEM_LOCAL_LLM_HOST', '127.0.0.1')}:{os.getenv('EM2MEM_LOCAL_LLM_PORT', '18100')}/v1",
-    )

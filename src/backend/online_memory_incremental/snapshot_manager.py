@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from online_preprocess.io_utils import ensure_dir, read_json, relative_to_session, utc_now_iso, write_json_atomic
-from online_memory_edit.lock import session_memory_mutation_lock
 
 
 class SnapshotManager:
@@ -23,26 +22,6 @@ class SnapshotManager:
             shutil.copy2(src, dst)
 
     def build_fast_snapshot(
-        self,
-        version: int,
-        *,
-        components: dict[str, Any],
-        long_term_partial_ready: bool,
-        long_term_full_ready: bool,
-        semantic_lagging: bool,
-        graph_lagging: bool,
-    ) -> Path:
-        with session_memory_mutation_lock(self.session_dir):
-            return self._build_fast_snapshot_unlocked(
-                version,
-                components=components,
-                long_term_partial_ready=long_term_partial_ready,
-                long_term_full_ready=long_term_full_ready,
-                semantic_lagging=semantic_lagging,
-                graph_lagging=graph_lagging,
-            )
-
-    def _build_fast_snapshot_unlocked(
         self,
         version: int,
         *,

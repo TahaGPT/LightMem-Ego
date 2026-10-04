@@ -14,7 +14,6 @@ import copy
 import json
 import logging
 import math
-import os
 import re
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -38,14 +37,6 @@ STOPWORDS = {
     "i", "me", "my", "we", "our", "you", "your", "he", "she", "they", "them",
     "this", "that", "these", "those", "it", "its"
 }
-
-
-def _env_int(name: str, default: int) -> int:
-    """Read an integer environment override without making query paths brittle."""
-    try:
-        return int(os.getenv(name, str(default)) or default)
-    except (TypeError, ValueError):
-        return default
 
 
 def _structured_value_to_text(value: Any) -> str:
@@ -849,10 +840,7 @@ class EM2Memory:
         ]
 
         try:
-            # Selector/rerank uses the retrieval client, which is configured
-            # for the external OpenAI-compatible endpoint. Final answer
-            # generation remains on respond_llm_model (local Qwen).
-            response = self.retriever_llm_model.generate(prompt)
+            response = self.respond_llm_model.generate(prompt)
             logger.info("LLM event selector raw response: %s", response)
         except Exception as e:
             logger.error(f"LLM event selector failed: {e}")
@@ -1200,7 +1188,7 @@ class EM2Memory:
         until_time: Optional[int] = None,
         answer_mode: str = "auto",
         use_image_evidence: bool = True,
-        max_image_frames: int = 3,
+        max_image_frames: int = 4,
         stream_handler: Any = None,
         prompt_context: Optional[str] = None,
         generate_answer: bool = True,
@@ -1438,27 +1426,14 @@ class EM2Memory:
 
         event_images: Dict[str, List[Any]] = {}
         if use_image_evidence and generate_answer:
-            # ``max_image_frames`` historically doubled as the per-event image
-            # limit.  Keep accepting a smaller caller override, but never allow
-            # a request-wide value (for example 9) to turn into 9 images for
-            # every selected event.  The defaults are aligned with the local
-            # Qwen/vLLM request budget: three images per evidence, nine total.
-            configured_per_event = max(0, _env_int("EM2MEM_IMAGES_PER_EVIDENCE_LIMIT", 3))
             try:
-                requested_per_event = int(max_image_frames)
-            except (TypeError, ValueError):
-                requested_per_event = configured_per_event
-            if requested_per_event > 0:
-                image_limit = min(configured_per_event, requested_per_event)
-            else:
-                image_limit = configured_per_event
-            total_image_limit = max(0, _env_int("EM2MEM_QUERY_MAX_TOTAL_IMAGES", 9))
-            if image_limit > 0 and total_image_limit > 0:
-                event_images = self.visual_memory.get_event_images(
-                    top_doc_ids,
-                    max_images_per_event=image_limit,
-                    total_max_images=total_image_limit,
-                )
+                image_limit = max(1, int(max_image_frames or self.visual_top_k or 1))
+            except Exception:
+                image_limit = max(self.visual_top_k, 1)
+            event_images = self.visual_memory.get_event_images(
+                top_doc_ids,
+                max_images_per_event=image_limit,
+            )
 
         if event_images:
             num_event_with_images = len(event_images)
